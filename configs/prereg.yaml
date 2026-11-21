@@ -1,0 +1,47 @@
+# Pre-registered values (sections 5 and 6). Commit this file, and write its commit hash in docs/decisions.md,
+# BEFORE running S0. Test-set sizes are re-computed from the discordance d measured at S0 (section 6.3) and
+# committed again before S1. Points are EM x 100.
+protocol: {k: 3, r_max: 8}
+reward: {lam: 0.2, mu: 0.25, mu0: 0.25}
+caps_from_teacher_p99: true          # per-tag token caps = p99 of the teacher's pilot traces, rounded up (S0)
+
+data_checks:
+  gold_mapping_min: 0.99
+  closed_book_max_multihop: 0.15
+  closed_book_max_fictional: 0.02
+  surface_auc_max: 0.60
+  leak_clean_min: 0.99
+  paraphrase_keep_min: 0.95
+  parity: {median_ratio_max: 1.5, p99_ratio_max: 2.0}
+
+p0:
+  lengths: [65536, 131072]
+  questions: 1000                    # per length, configs (b) (c) (d) (f); 500 for (a) (e) and at 32K
+  delta_oracle_min: 2.0              # Delta_oracle = EM(b) - EM(d) >= 2 and CI lower bound > 0
+  pi_large: 3.0                      # Pi = EM(f) - EM(b) >= 3 and CI lower bound > 0 -> "large"
+  compact_keep_if_pi_reduced_by: 0.5 # keep the compact frame if it at least halves Pi
+
+s1:
+  lora_vs_full_max_gap: 2.0          # LoRA more than 2 points below full FT (CI excluding 0) -> full FT everywhere
+  skip_nomask_rest_if_delta_le: -2.0 # Delta_mask(SFT) <= -2 with CI upper bound < 0 -> report RQ1 at SFT level
+
+s2_gate:
+  valid_rate_min: 0.95
+  em_at_least_config_a: true         # EM(SealedRead-SFT, dev 64K) >= EM(full attention zero-shot) on the same questions
+
+rest_em: {n: 4, temperature: 0.7, keep_per_question: 2, cap: 4000, recall_min: 0.5}
+
+rq1:
+  lengths: [65536, 131072]
+  delta_mask_min: 2.0                # and CI lower bound > 0, mean over 3 seeds
+  noninferiority_length: 32768
+  noninferiority_margin: 1.0         # value of the proposal; see docs/decisions.md D7 (underpowered at n = 1000)
+  seeds: 3
+  fallback_band: [-1.0, 2.0]
+
+rq2: {delta_min: 2.0, tie_band: 2.0}
+round2: {em_gain_min: 1.0}           # optional second ReST-EM round only if round 1 gained >= 1 point (CI > 0)
+hop_skip_claim_max: 0.5              # above this at the last checkpoint: no claim that reasoning happens in the masked phase
+
+test_sizes: {d: 0.2, delta: 0.03, floor: 1500, ceiling: 2500, test_64k_128k: 2000, test_32k: 1000, val: 1500,
+             dev: 1000}

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "srd"
+version = "0.1.0"
+description = "SealedRead: phase-gated attention masking for long-context reasoning with small models"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+# Model code (reference engine, trainer, probes). On GPU machines install torch matching the CUDA driver first.
+train = [
+    "torch>=2.5",
+    "transformers",
+    "safetensors",
+    "huggingface_hub",
+]
+# Fast inference (teacher traces, ReST-EM sampling, evaluation). vLLM pins its own torch: install it first.
+infer = ["vllm"]
+# Raw data from Hugging Face (scripts/fetch_data.py --from-hf, scripts/fetch_benchmarks.py)
+data = ["pandas", "pyarrow", "datasets"]
+# Dense retriever + reranker for the RAG baselines (BM25 needs nothing)
+rag = ["sentence-transformers"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore:flex_attention called without torch.compile"]

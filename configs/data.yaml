@@ -1,0 +1,25 @@
+# M1 data build (section 4). scripts/build_data.py --config configs/data.yaml
+extends: base.yaml
+build:
+  tokenizer: Qwen/Qwen3-4B-Instruct-2507   # exact token budgets ("approx" = 4 characters per token, CPU only)
+  max_seg_tokens: 256
+  min_seg_tokens: 32
+  hard_distractors: 8
+  train_shards: [0, 1, 2, 3, 4, 10, 11, 12, 13, 14]
+  eval_shard: 90
+  datasets: [hotpotqa, 2wikimultihopqa, musique]
+  train:
+    n: 7000
+    length: [16000, 24000]                 # uniform per sample
+    mix: {multihop: 0.50, paraphrase: 0.15, fictional: 0.15, multiseg: 0.10, nocontext: 0.10}
+    multiseg_enumeration_share: 0.5        # the rest: 2Wiki comparison / bridge-comparison questions
+  val: {n: 1500, length: [16000, 24000]}
+  reserve: {n: 3000, length: [16000, 24000]}  # teacher top-ups when a type falls short
+  dev:
+    n: 1000
+    lengths: {32768: 500, 65536: 1000, 131072: 1000}
+  test:
+    n: 2000
+    lengths: {32768: 1000, 65536: 2000, 131072: 2000}
+    fictional_lengths: [65536, 131072]
+  closed_book_filter: null                # file from scripts/closed_book.py: drop train items the base model solves

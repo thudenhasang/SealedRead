@@ -1,0 +1,25 @@
+# S1a: teacher traces (section 5.3). scripts/teacher_traces.py configs/teacher.yaml [--mode protocol|rag|cot]
+extends: base.yaml
+run: {name: teacher}
+engine:
+  backend: vllm
+  model: Qwen/Qwen3.6-27B-FP8            # check the exact name on Hugging Face (FP8 weights, thinking off)
+  tokenizer: null
+  quantization: null                     # an FP8 checkpoint carries its own quantization config
+  tensor_parallel_size: 2
+  max_model_len: 32768
+  gpu_memory_utilization: 0.90
+  temperature: 0.7
+  top_p: 0.95
+prompts:
+  assistant_prefix: "<think>\n\n</think>\n\n"   # thinking off for a hybrid-thinking teacher; "" if not needed
+student_tokenizer: Qwen/Qwen3-4B-Instruct-2507
+teacher:
+  samples: "${DATA:-/content/data/srd}/train.jsonl"
+  reserve: "${DATA:-/content/data/srd}/reserve.jsonl"
+  total: 3000                 # minimal plan: 2000
+  attempts: 4
+  batch: 64
+  mix: {multihop: 0.50, paraphrase: 0.15, fictional: 0.15, multiseg: 0.10, nocontext: 0.10}
+  pilot: 200                  # S0: traces for the per-tag caps (p99) and the filter pass rates
+  out: "${RUNS:-/content/runs}/teacher"

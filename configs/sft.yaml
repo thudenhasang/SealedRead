@@ -1,0 +1,22 @@
+# S1b: SFT on teacher traces, one run per branch and seed (section 5.3). Same traces, own mask (table 10).
+#   python scripts/train_sft.py configs/sft.yaml train.branch=nomask run.name=sft_nomask_s0 run.seed=0
+extends: base.yaml
+run: {name: sft_sealedread_s0, save_every: 50}
+data:
+  train: "${RUNS:-/content/runs}/teacher/traces_protocol.jsonl"     # rag: traces_rag.jsonl; sealong: traces_cot.jsonl
+  val: "${RUNS:-/content/runs}/teacher/traces_val.jsonl"
+train:
+  branch: sealedread          # sealedread | sealedread_chain | nomask | daft | rag | sealong
+  full_ft: false              # pilot: one full fine-tuning run of the SealedRead branch
+  lr: 1.0e-4                  # ~10x the full fine-tuning rate (LoRA)
+  full_ft_lr: 1.0e-5
+  epochs: 3
+  patience: 1                 # early stopping on validation loss
+  batch_traces: 32
+  warmup_steps: 10
+  min_lr_ratio: 0.1
+  weight_decay: 0.0
+  grad_clip: 1.0
+  grad_ckpt: true
+  attn: null                  # flex on GPU, dense on CPU
+  pad_to: 1024                # compiled FlexAttention shapes

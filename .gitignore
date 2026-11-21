@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+.env.*
+
+# Large artifacts live on Google Drive / the GPU machine's disk, not in git
+/data/
+/runs/
+/runs_smoke/
+/models/
+/logs/
+*.pt
+*.safetensors
+*.parquet
+*.npy
+*.jsonl.orig
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

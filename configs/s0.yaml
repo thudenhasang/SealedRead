@@ -1,0 +1,13 @@
+# S0 (P0): measurements without training (section 5.2). scripts/p0_probe.py configs/s0.yaml
+extends: base.yaml
+run: {name: s0}
+s0:
+  dev_files: {32768: "${DATA:-/content/data/srd}/dev_32k.jsonl", 65536: "${DATA:-/content/data/srd}/dev_64k.jsonl",
+              131072: "${DATA:-/content/data/srd}/dev_128k.jsonl"}
+  questions: {b: 1000, c: 1000, d: 1000, f: 1000, a: 500, e: 500, at_32k: 500}
+  configs: [a, b, c, d, e, f]
+  # which engine runs each config: (b) (c) need the full frame without C -> reference engine on short sequences;
+  # (e) needs original KV -> reference engine with C; the others run on vLLM
+  backend: {a: vllm, b: ref, c: ref, d: vllm, e: ref, f: vllm}
+  lenient: true               # zero-shot: default a missing alpha/beta instead of ending the episode
+  recall_at_k: {chunk_files: {128: null, 256: null, 512: null}, questions: 300}

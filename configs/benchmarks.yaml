@@ -1,0 +1,10 @@
+# RQ2 / out-of-distribution benchmarks (section 6.2). scripts/fetch_benchmarks.py --config configs/benchmarks.yaml
+# Hugging Face names are the usual copies; check them (and their field names) on the first run.
+extends: base.yaml
+benchmarks:
+  out: "${DATA_BENCH:-/content/data/srd_bench}"
+  tokenizer: Qwen/Qwen3-4B-Instruct-2507
+  lengths: [32768, 65536, 131072]
+  qasper: {hf: allenai/qasper, split: test, padded: true}
+  narrativeqa: {hf: deepmind/narrativeqa, split: test, limit: 1000, max_words: 90000, padded: false}
+  quality: {hf: emozilla/quality, split: validation, padded: true}

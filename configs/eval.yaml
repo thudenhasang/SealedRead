@@ -1,0 +1,15 @@
+# S5: evaluation (section 6). scripts/evaluate.py configs/eval.yaml eval.branch=nomask engine.adapter=...
+extends: base.yaml
+run: {name: eval}
+eval:
+  branch: sealedread          # sealedread | sealedread_chain | nomask | daft | rag | plain | copy | rag1
+  files: ["${DATA:-/content/data/srd}/test_64k.jsonl", "${DATA:-/content/data/srd}/test_128k.jsonl", "${DATA:-/content/data/srd}/test_32k.jsonl"]
+  limit: null
+  n: 1                        # samples per question (greedy)
+  permute_ids: false          # RQ4 (c)
+  oracle: false               # same pasted evidence: G pasted at the first locate (RQ1 comparison)
+  lenient: false
+  repeat_q: true              # ablation: no Q'
+  locate_query_only: false    # ablation: <locate> reads only its <query>
+  hide_locate: true           # ablation (reference engine only)
+  out: "${RUNS:-/content/runs}/eval"

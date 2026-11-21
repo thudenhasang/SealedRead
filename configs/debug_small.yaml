@@ -1,0 +1,14 @@
+# Rehearsal on one Colab A100 (plan, phase 7): Qwen3-0.6B (same tokenizer and architecture as 4B), short contexts,
+# a few hundred questions, every stage end to end. Build its data with:
+#   python scripts/build_data.py --config configs/data.yaml --out ${DATA_SMALL:-/content/data/srd_small} build.train.n=300 \
+#     build.train.length=[4000,8000] build.val.n=60 build.reserve.n=60 build.dev.n=100 build.test.n=100 \
+#     "build.dev.lengths={8192: 100}" "build.test.lengths={8192: 100, 16384: 100}" build.test.fictional_lengths=[8192]
+extends: base.yaml
+run: {name: debug_small, save_every: 20}
+model: {name: Qwen/Qwen3-0.6B}
+engine: {model: Qwen/Qwen3-0.6B, max_model_len: 20000, gpu_memory_utilization: 0.6}
+data:
+  dir: "${DATA_SMALL:-/content/data/srd_small}"
+  samples: ["${DATA_SMALL:-/content/data/srd_small}/train.jsonl", "${DATA_SMALL:-/content/data/srd_small}/val.jsonl", "${DATA_SMALL:-/content/data/srd_small}/reserve.jsonl"]
+train: {branch: sealedread, lr: 2.0e-4, epochs: 2, batch_traces: 8, warmup_steps: 5, patience: 1, grad_ckpt: true,
+        pad_to: 1024}

@@ -1,0 +1,53 @@
+# Shared settings. Every stage config extends this file; values are the proposal's (see configs/prereg.yaml for the
+# pre-registered thresholds). Paths read ${DATA} and ${RUNS} (defaults: Colab's /content; scripts/cluster/env.sh sets them).
+run:
+  name: base
+  out_dir: "${RUNS:-/content/runs}"
+  seed: 0
+  save_every: 50
+  keep: 2
+  max_minutes: 0              # stop cleanly after this many minutes (0 = no cap); Colab scripts set it
+
+model:
+  name: Qwen/Qwen3-4B-Instruct-2507     # full attention, 262,144 positions (section 3.8)
+  tokenizer: null                       # defaults to model.name
+  dtype: bfloat16
+
+protocol:
+  k: 3
+  r_max: 8
+  caps: {reason: 512, query: 64, recheck: 256, answer: 64}   # replaced by the teacher pilot's p99 at S0
+  locate_max_tokens: 48
+
+reward: {lam: 0.2, mu: 0.25, mu0: 0.25, k: 3, r_max: 8}
+
+prompts:
+  assistant_prefix: ""
+  show_titles: true
+
+data:
+  dir: "${DATA:-/content/data/srd}"
+  samples: ["${DATA:-/content/data/srd}/train.jsonl", "${DATA:-/content/data/srd}/val.jsonl", "${DATA:-/content/data/srd}/reserve.jsonl"]
+
+lora:
+  r: 64                       # section 5.3: LoRA on every linear layer, r = 64, alpha = 2r
+  alpha: 128
+  dropout: 0.0
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+engine:
+  backend: vllm               # vllm | ref
+  model: Qwen/Qwen3-4B-Instruct-2507
+  max_model_len: 140000
+  gpu_memory_utilization: 0.85
+  tensor_parallel_size: 1
+  max_lora_rank: 64
+  temperature: 0.0
+  top_p: 1.0
+
+retriever:                    # RAG baselines; the dense models are committed before S0
+  kind: bm25
+  # kind: dense
+  # encoder: BAAI/bge-large-en-v1.5
+  # reranker: BAAI/bge-reranker-v2-m3
+  # query_prefix: "Represent this sentence for searching relevant passages: "

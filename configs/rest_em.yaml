@@ -1,0 +1,18 @@
+# S2: one ReST-EM round (section 5.4). Sampling: scripts/rest_em.py configs/rest_em.yaml; M-step: train_sft.py with
+# init_from = the S1 run and data.train = the selected samples.
+extends: base.yaml
+run: {name: rest_sealedread_s0}
+rest_em:
+  branch: sealedread          # sealedread | nomask | rag
+  init_from: "${RUNS:-/content/runs}/sft_sealedread_s0"
+  samples: "${DATA:-/content/data/srd}/train.jsonl"
+  n: 4
+  temperature: 0.7
+  top_p: 1.0
+  variant: soft               # soft | hard | nogate (RQ3)
+  keep_per_question: 2
+  cap: 4000
+  recall_min: 0.5
+  out: "${RUNS:-/content/runs}/rest_sealedread_s0"
+engine:
+  temperature: 0.7

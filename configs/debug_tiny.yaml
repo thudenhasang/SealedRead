@@ -1,0 +1,9 @@
+# CPU smoke run of the whole pipeline (scripts/smoke.py): tiny random model, byte tokenizer, synthetic data.
+extends: base.yaml
+run: {name: smoke, out_dir: runs_smoke, save_every: 5}
+model: {name: tiny}
+protocol:
+  caps: {reason: 24, query: 12, recheck: 16, answer: 8}
+lora: {r: 8, alpha: 16}
+train: {branch: sealedread, lr: 0.01, epochs: 2, batch_traces: 4, warmup_steps: 1, patience: 2, grad_ckpt: true,
+        attn: dense, pad_to: 1}
