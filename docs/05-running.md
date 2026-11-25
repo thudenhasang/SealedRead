@@ -3,7 +3,7 @@
 ## Máy cá nhân (CPU)
 ```bash
 python -m venv .venv && .venv/bin/pip install -e ".[train,dev]"
-.venv/bin/python -m pytest -q          # 93 test, khoảng 1 phút
+.venv/bin/python -m pytest -q          # 94 test, khoảng 1 phút
 .venv/bin/python scripts/smoke.py      # chạy thử cả chuỗi trên dữ liệu tổng hợp với mô hình tí hon
 ```
 Dữ liệu thật có thể dựng trên CPU, đếm token xấp xỉ:

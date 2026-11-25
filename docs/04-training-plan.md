@@ -5,7 +5,7 @@
 ## Trước khi thuê máy lớn (Colab A100)
 | Bước | Lệnh | Điều kiện đi tiếp |
 |---|---|---|
-| Test CPU | `pytest -q`, `python scripts/smoke.py` | 93 test qua, `SMOKE_DONE` |
+| Test CPU | `pytest -q`, `python scripts/smoke.py` | 94 test qua, `SMOKE_DONE` |
 | Thử nghiệm trên Colab Pro | [07-colab-test-plan.md](07-colab-test-plan.md) | các tiêu chí đạt ở cuối file đó |
 | Chi phí SFT | `python scripts/cost_probe.py configs/sft.yaml --part sft --steps 5` | s/bước, VRAM đỉnh → cập nhật Bảng 7 |
 

@@ -22,9 +22,9 @@ Tất cả các bước đều có marker trên Drive: runtime bị reset thì c
 ---
 
 ## Chuẩn bị (một lần)
-1. Đẩy repo lên GitHub. Sửa `REPO_URL` trong `notebooks/colab_quickstart.ipynb`.
-2. Tạo token GitHub chỉ đọc cho repo, lưu vào Colab Secrets với tên `GITHUB_TOKEN`.
-3. Kiểm tra Drive có shard tại `MyDrive/ragproj2/data/train/` (cùng shard keychain-dv dùng). Nếu không có, sửa bước `fetch_shards` trong script sang `--from-hf`.
+1. Repo `thudenhasang/sealedread` là public: notebook clone được mà không cần token.
+2. Shard dữ liệu: nếu Drive có `MyDrive/ragproj2/data/train/` (cùng shard keychain-dv dùng) thì script lấy từ đó; nếu không, script tự dựng lại từ Hugging Face (vài phút) và lưu một bản lên `MyDrive/sealedread/data/shards/` cho các lần sau.
+3. Dữ liệu đã dựng và kết quả đều được lưu lên Drive, nên runtime bị reset thì chạy lại đúng lệnh là tiếp tục được.
 4. Mở notebook, chạy các ô theo thứ tự: GPU → Drive → Clone → Setup → Restore/persist.
 
 ---
@@ -35,7 +35,7 @@ cd /content/sealedread && /content/venv-srd/bin/python -m pytest -q tests
 /content/venv-srd/bin/python scripts/smoke.py --out /content/runs/smoke
 ```
 **Kết quả đạt:**
-- `93 passed`;
+- `94 passed`;
 - `SMOKE_DONE` (đủ 7 bước).
 
 **Nếu trượt:** khác biệt phiên bản thư viện trên Colab. Gửi log để sửa trước khi dùng GPU.

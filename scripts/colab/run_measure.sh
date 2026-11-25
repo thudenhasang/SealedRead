@@ -16,12 +16,14 @@ GPU_GB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | hea
 log "GPU memory: ${GPU_GB} GB"
 MAXLEN=$([ "$GPU_GB" -ge 70 ] && echo 140000 || echo 135000)
 
-step fetch_shards $PY scripts/fetch_data.py --from-drive "$SHARDS" --out /content/data/shards || exit 1
+ensure_shards || exit 1
+restore_data "$P"
 step m_tokenizer $PY scripts/tokenizer_check.py $M --out "$R/tokenizer_check.json" || exit 1
 step m_build $PY scripts/build_data.py --config configs/data.yaml --shards-dir /content/data/shards --out "$P" \
   "build.train_shards=[0,1]" build.eval_shard=4 build.train.n=60 build.val.n=20 build.reserve.n=5 \
   build.dev.n=300 "build.dev.lengths={32768: 20, 65536: 300, 131072: 30}" build.test.n=50 \
   "build.test.lengths={65536: 50}" "build.test.fictional_lengths=[65536]" || exit 1
+save_data "$P"
 step m_closed_book $PY scripts/closed_book.py configs/base.yaml --samples "$P/test_64k.jsonl" \
   "$P/test_fict_64k.jsonl" --out "$R/closed_book.jsonl" || exit 1
 # data checks are reported, not blocking here: the numbers go to docs/results/colab-test.md

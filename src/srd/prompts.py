@@ -53,7 +53,8 @@ class Prompts:
     @staticmethod
     def from_cfg(d: dict | None) -> "Prompts":
         d = dict(d or {})
-        return Prompts(assistant_prefix=d.get("assistant_prefix", ""), show_titles=d.get("show_titles", True))
+        return Prompts(assistant_prefix=d.get("assistant_prefix") or "",
+                       show_titles=d.get("show_titles", True) is not False)
 
     # ------------------------------------------------------------------ the sandwich
     def head(self) -> str:

@@ -52,7 +52,7 @@ src/srd/
   train/            data (view theo nhánh), sft (trainer)
   rest_em.py, teacher.py
   eval/             metrics, stats (bootstrap cụm ghép cặp), gates (cổng chốt trước), probes (bất biến/phụ thuộc), runner
-tests/              test CPU (pytest), 93 test
+tests/              test CPU (pytest), 94 test
 tools/colab.py      client cầu nối Colab (giữ nguyên từ keychain-dv)
 ```
 

@@ -11,6 +11,7 @@ sync_once() {
   # live adapters are rewritten every step and are re-made from the checkpoints: not copied
   [ -d "$RUNS" ] && rsync -a --exclude 'adapters_live/' "$RUNS/" "$DRIVE/runs/"
   [ -d "$LOGS" ] && rsync -a "$LOGS/" "$DRIVE/logs/"
+  [ -d /content/data ] && rsync -a --exclude 'shards/' /content/data/ "$DRIVE/data/"
   date +%H:%M:%S > "$DRIVE/last_persist.txt"
 }
 

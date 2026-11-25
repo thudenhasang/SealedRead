@@ -143,3 +143,11 @@ def test_every_row_sees_something(chain):
     seq, M = chain
     assert M.any(axis=1).all()
     assert np.array_equal(np.diag(M), np.ones(len(seq), bool))
+
+
+def test_empty_prefix_override_is_empty_string():
+    """`prompts.assistant_prefix=` on the command line reads as None: it must mean no prefix, not a crash."""
+    from srd.prompts import Prompts
+
+    p = Prompts.from_cfg({"assistant_prefix": None})
+    assert p.assistant_start() == "<|im_start|>assistant\n"

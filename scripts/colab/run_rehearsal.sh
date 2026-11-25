@@ -6,15 +6,17 @@
 source "$(dirname "$0")/common.sh"
 S=/content/data/srd_small
 R=$RUNS/rehearsal
-step reh_shards $PY scripts/fetch_data.py --from-drive "$SHARDS" --out /content/data/shards || exit 1
+ensure_shards || exit 1
+restore_data $S
 # train shards only (s0, s1 for training; s4 plays dev/test): the real s90 dev/test stay unseen (D24)
 step reh_build $PY scripts/build_data.py --config configs/data.yaml --shards-dir /content/data/shards --out $S \
   "build.train_shards=[0,1]" build.eval_shard=4 build.tokenizer=Qwen/Qwen3-0.6B build.train.n=120 "build.train.length=[4000,8000]" build.val.n=30 \
   "build.val.length=[4000,8000]" build.reserve.n=20 "build.reserve.length=[4000,8000]" build.dev.n=40 \
   "build.dev.lengths={8192: 40}" build.test.n=40 "build.test.lengths={8192: 40, 16384: 40}" \
   "build.test.fictional_lengths=[8192]" || exit 1
+save_data $S
 step reh_check $PY scripts/check_data.py $S/*.jsonl --out $S/checks.json || exit 1
-T="engine.model=Qwen/Qwen3-0.6B engine.tensor_parallel_size=1 engine.max_model_len=20000 prompts.assistant_prefix= \
+T="engine.model=Qwen/Qwen3-0.6B engine.tensor_parallel_size=1 engine.max_model_len=20000 \
   student_tokenizer=Qwen/Qwen3-0.6B teacher.samples=$S/train.jsonl teacher.reserve=$S/reserve.jsonl teacher.total=80 \
   teacher.out=$R/teacher teacher.pilot=20"
 step reh_teacher $PY scripts/teacher_traces.py configs/teacher.yaml --mode protocol $T || exit 1
