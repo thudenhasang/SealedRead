@@ -14,12 +14,11 @@ data_checks:
   paraphrase_keep_min: 0.95
   parity: {median_ratio_max: 1.5, p99_ratio_max: 2.0}
 
-p0:
+p0:                                  # main design: two streams, compact frame (docs/decisions.md D1)
   lengths: [65536, 131072]
-  questions: 1000                    # per length, configs (b) (c) (d) (f); 500 for (a) (e) and at 32K
-  delta_oracle_min: 2.0              # Delta_oracle = EM(b) - EM(d) >= 2 and CI lower bound > 0
-  pi_large: 3.0                      # Pi = EM(f) - EM(b) >= 3 and CI lower bound > 0 -> "large"
-  compact_keep_if_pi_reduced_by: 0.5 # keep the compact frame if it at least halves Pi
+  questions: 1000                    # per length, configs (d) (f); 500 for (a) (b) and at 32K
+  delta_oracle_min: 2.0              # gate: Delta_oracle = EM(f) - EM(d) >= 2 and CI lower bound > 0
+  pi_large: 3.0                      # diagnostic only: Pi = EM(f) - EM(b) >= 3 with CI > 0 -> positional share large
 
 s1:
   lora_vs_full_max_gap: 2.0          # LoRA more than 2 points below full FT (CI excluding 0) -> full FT everywhere

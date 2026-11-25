@@ -4,10 +4,12 @@ run: {name: s0}
 s0:
   dev_files: {32768: "${DATA:-/content/data/srd}/dev_32k.jsonl", 65536: "${DATA:-/content/data/srd}/dev_64k.jsonl",
               131072: "${DATA:-/content/data/srd}/dev_128k.jsonl"}
-  questions: {b: 1000, c: 1000, d: 1000, f: 1000, a: 500, e: 500, at_32k: 500}
-  configs: [a, b, c, d, e, f]
-  # which engine runs each config: (b) (c) need the full frame without C -> reference engine on short sequences;
-  # (e) needs original KV -> reference engine with C; the others run on vLLM
+  # main design = two streams, compact frame. Gate: (f) vs (d). (a): full-attention reference. (b): same mask in the
+  # full frame, only to measure Pi (the positional share). (c) and (e) are optional extras (reference engine).
+  questions: {d: 1000, f: 1000, a: 500, b: 500, c: 500, e: 500, at_32k: 500}
+  configs: [a, d, f, b]
+  # (b) (c) need the full frame without C -> reference engine on short sequences; (e) needs original KV ->
+  # reference engine with C; the others run on vLLM
   backend: {a: vllm, b: ref, c: ref, d: vllm, e: ref, f: vllm}
   lenient: true               # zero-shot: default a missing alpha/beta instead of ending the episode
   recall_at_k: {chunk_files: {128: null, 256: null, 512: null}, questions: 300}

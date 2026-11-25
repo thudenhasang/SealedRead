@@ -145,7 +145,10 @@ class KVCache:
         start, end = self.length, self.length + k.shape[2]
         buf = self.k[layer]
         if buf is None or buf.shape[2] < end:
-            cap = max(end, 2 * (buf.shape[2] if buf is not None else 0), 256)
+            # grow by ~1/8 (not x2): after a 128K prefill, doubling would allocate a second 128K of KV for a few
+            # hundred generated tokens (about 19 GB more for the 4B model)
+            old = buf.shape[2] if buf is not None else 0
+            cap = max(end, old + max(4096, end // 8)) if old else end
             nk = k.new_zeros(k.shape[0], k.shape[1], cap, k.shape[3])
             nv = v.new_zeros(v.shape[0], v.shape[1], cap, v.shape[3])
             if buf is not None and start:

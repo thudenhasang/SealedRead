@@ -81,7 +81,9 @@ def main() -> int:
                                          "answer": o["answer"], "em": r_ans(o["answer"], s),
                                          "f1": answer_f1(o["answer"], s), "valid": not o["truncated"]}) + "\n")
             continue
-        evaluate(pol, samples, e.get("n", 1), drv, rcfg, path, prompts, retriever=retr, token_count=count,
+        # the reference engine keeps one KV cache (with all of C) per live episode: one question at a time
+        batch = 1 if ecfg.get("backend") == "ref" else 128
+        evaluate(pol, samples, e.get("n", 1), drv, rcfg, path, prompts, retriever=retr, token_count=count, batch=batch,
                  extra={"branch": tag}, log=log)
         if n == 1 and pol is not None:
             agg = aggregate(load_records(path))

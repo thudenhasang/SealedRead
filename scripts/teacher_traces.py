@@ -5,6 +5,12 @@
     python scripts/teacher_traces.py configs/teacher.yaml --mode cot           (SEALONG: full-attention CoT)
     python scripts/teacher_traces.py configs/teacher.yaml --mode protocol --val 300     (validation traces)
     python scripts/teacher_traces.py configs/teacher.yaml --pilot              (S0: caps = p99 per tag, pass rates)
+
+Several teacher processes at once (8 GPUs, tensor parallel 2 -> 4 processes; scripts/cluster/par.sh sets SHARD and
+NUM_SHARDS): each takes its share of the questions and of every type's quota and writes <name>.shardIofN.jsonl;
+then one call with --merge joins the shares into <name>.jsonl, within the global quotas:
+    GPUS_PER_PROC=2 bash scripts/cluster/par.sh teacher scripts/teacher_traces.py configs/teacher.yaml --mode protocol
+    python scripts/teacher_traces.py configs/teacher.yaml --mode protocol --merge
 """
 from __future__ import annotations
 
@@ -18,17 +24,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import numpy as np  # noqa: E402
 
-from srd.cli import config_from_argv, log, to_plain, write_json  # noqa: E402
-from srd.data.sample import load_samples, write_jsonl  # noqa: E402
+from srd.cli import config_from_argv, log, shard_args, shard_suffix, to_plain, write_json  # noqa: E402
+from srd.data.sample import load_samples, read_jsonl, write_jsonl  # noqa: E402
 from srd.engine.driver import DriverConfig, run_episodes  # noqa: E402
 from srd.engine.factory import make_vllm_engine  # noqa: E402
 from srd.engine.plain import run_plain  # noqa: E402
 from srd.engine.retriever import make_retriever  # noqa: E402
 from srd.engine.vllm_policy import VLLMPolicy  # noqa: E402
+from srd.eval.runner import shard  # noqa: E402
 from srd.prompts import Prompts  # noqa: E402
 from srd.protocol import MASKED_TAGS, ProtoConfig  # noqa: E402
 from srd.reward import RewardConfig, r_ans  # noqa: E402
-from srd.teacher import collect, teacher_ok  # noqa: E402
+from srd.teacher import collect, merge, quotas, shard_quotas, split_total, teacher_ok  # noqa: E402
 from srd.tok import load_tok  # noqa: E402
 
 
@@ -36,11 +43,41 @@ def _flag(flags, name, default=None):
     return flags[flags.index(name) + 1] if name in flags else default
 
 
+def trace_name(mode: str, val: bool) -> str:
+    if mode == "cot":
+        return "traces_cot"
+    if val:
+        return "traces_val" if mode == "protocol" else f"traces_{mode}_val"
+    return f"traces_{mode}"
+
+
+def merge_shards(out: Path, name: str, total: int, mix: dict | None) -> int:
+    files = sorted(out.glob(f"{name}.shard*of*.jsonl"))
+    if not files:
+        raise SystemExit(f"no shard files {name}.shard*of*.jsonl under {out}")
+    recs, stats = merge([list(read_jsonl(f)) for f in files], quotas(total, mix) if mix else None, total)
+    write_jsonl(out / f"{name}.jsonl", recs)
+    stats["files"] = [f.name for f in files]
+    write_json(out / f"{name}.stats.json", stats)
+    log(f"merged {len(files)} files -> {name}.jsonl: {stats['got']} (want {stats['want']})")
+    print("TEACHER_MERGE_DONE")
+    return 0
+
+
 def main() -> int:
     cfg, flags = config_from_argv()
     t = to_plain(cfg.teacher)
     out = Path(t["out"])
     mode = _flag(flags, "--mode", "protocol")
+    val_n = _flag(flags, "--val")
+    name = trace_name(mode, bool(val_n))
+    total = int(val_n) if val_n else t["total"]
+    if "--merge" in flags:
+        return merge_shards(out, name, total, None if mode == "cot" else t["mix"])
+    i, n = shard_args()
+    if "--pilot" in flags and i > 0:
+        print("TEACHER_PILOT_SKIPPED (shard > 0)")
+        return 0
     ecfg = to_plain(cfg.engine)
     proto = ProtoConfig.from_cfg(to_plain(cfg.protocol))
     rcfg = RewardConfig.from_cfg(to_plain(cfg.reward))
@@ -50,13 +87,15 @@ def main() -> int:
     count = (lambda x: len(stok.encode(x)))
     engine = make_vllm_engine(ecfg, False)
     temp, top_p = ecfg.get("temperature", 0.7), ecfg.get("top_p", 1.0)
-    val_n = _flag(flags, "--val")
     samples = load_samples(t["samples"] if not val_n else t["samples"].replace("train.jsonl", "val.jsonl"))
     if t.get("reserve") and not val_n:
         samples += load_samples(t["reserve"])
+    if "--pilot" not in flags:
+        samples = shard(samples, i, n)
     if mode == "cot":
         recs = []
-        outs = run_plain(engine, tok, prompts, samples[: 2 * t["total"]], "plain", temperature=temp, n=t["attempts"])
+        my_total = split_total(total, i, n)
+        outs = run_plain(engine, tok, prompts, samples[: 2 * my_total], "plain", temperature=temp, n=t["attempts"])
         by = {s.qid: s for s in samples}
         seen = set()
         for o in outs:
@@ -64,9 +103,9 @@ def main() -> int:
                 continue
             seen.add(o["qid"])
             recs.append({"qid": o["qid"], "text": o["text"], "source": "teacher_cot"})
-            if len(recs) >= t["total"]:
+            if len(recs) >= my_total:
                 break
-        write_jsonl(out / "traces_cot.jsonl", recs)
+        write_jsonl(shard_suffix(out / f"{name}.jsonl"), recs)
         log(f"{len(recs)} CoT traces")
         print("TEACHER_DONE")
         return 0
@@ -89,14 +128,12 @@ def main() -> int:
         log(f"pilot: caps (p99, student tokens) {caps}; filter {dict(why)}")
         print("TEACHER_PILOT_DONE")
         return 0
-    total = int(val_n) if val_n else t["total"]
+    want = shard_quotas(total, t["mix"], i, n)
     recs, stats = collect(pol, samples, total, t["mix"], drv, rcfg, t["attempts"], t["batch"], count, retr,
-                          log=log)
-    name = {"protocol": "traces_protocol", "rag": "traces_rag"}[mode] + ("_val" if val_n else "")
-    if val_n and mode == "protocol":
-        name = "traces_val"
-    write_jsonl(out / f"{name}.jsonl", recs)
-    write_json(out / f"{name}.stats.json", stats)
+                          log=log, seed=cfg.run.seed * 1000 + i, want=want)
+    path = shard_suffix(out / f"{name}.jsonl")
+    write_jsonl(path, recs)
+    write_json(path.with_suffix(".stats.json"), stats)
     log(json.dumps(stats))
     print("TEACHER_DONE")
     return 0

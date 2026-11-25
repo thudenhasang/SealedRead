@@ -47,6 +47,8 @@ Dùng cùng shard với keychain-dv, ở `MyDrive/ragproj2/data/train/`:
 
 Lọc closed-book chỉ áp dụng cho dữ liệu huấn luyện: `scripts/closed_book.py` trên shard sinh file, rồi đặt `build.closed_book_filter`. Mỗi cụm bootstrap là một câu hỏi gốc (`Sample.cluster`).
 
+Dev/test cố định (D25): câu hỏi dev/test được chọn bằng nguồn ngẫu nhiên riêng, và kho đoạn nhiễu (`build.pool_shards`) được lấy trước khi lọc closed-book. Đổi cỡ tập train hay bật bộ lọc closed-book không làm thay đổi câu hỏi lẫn ngữ cảnh của dev/test.
+
 ## Kiểm tra (`scripts/check_data.py`, ngưỡng ở `configs/prereg.yaml`)
 | # | Kiểm tra | Ở đâu |
 |---|---|---|

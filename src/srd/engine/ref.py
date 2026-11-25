@@ -2,7 +2,9 @@
 
 It runs every branch of table 10 and every inference ablation exactly as the trainer sees them (it builds its
 sequence with the same SeqBuilder, and tests/test_engine.py checks that a forced trace gives the very layout of
-build_seq). It is slow, and it is the yardstick: S0 configs that need no C prefill ((b), (c), (f): `view="masked"`
+build_seq). Memory: every live episode keeps its own KV cache, with all of C in the chain view (about 19 GB at 128K for the
+4B model), so long-context runs go one question at a time (scripts pass batch=1). It is slow, and it is the
+yardstick: S0 configs that need no C prefill ((b), (c), (f): `view="masked"`
 with an oracle locator), the invariance probes, and the log-prob parity check of the fast engine (check 6).
 
 Canonical tokenization: after a tag closes, the generated tokens are rolled back and the step is re-encoded from its

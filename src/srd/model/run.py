@@ -48,17 +48,21 @@ def target_ce(model, hidden: torch.Tensor, ids: torch.Tensor, target_idx: torch.
     return torch.stack(parts).sum() if reduction == "sum" else torch.cat(parts)
 
 
+def _pad(mode: str, pad_to: int | None) -> int:
+    return pad_to if pad_to is not None else (1024 if mode == "flex" else 1)
+
+
 @torch.no_grad()
-def target_logprobs(model, seq: Seq, mode: str = "dense") -> torch.Tensor:
+def target_logprobs(model, seq: Seq, mode: str = "dense", pad_to: int | None = None) -> torch.Tensor:
     """log p of every target token of the layout (in storage order of the targets)."""
-    h, t = forward_seq(model, seq, mode)
+    h, t = forward_seq(model, seq, mode, _pad(mode, pad_to))
     idx = torch.as_tensor(seq.target_index(), device=h.device)
     return -target_ce(model, h, t["ids"], idx, reduction="none")
 
 
 @torch.no_grad()
-def token_logprobs(model, seq: Seq, index, mode: str = "dense") -> torch.Tensor:
+def token_logprobs(model, seq: Seq, index, mode: str = "dense", pad_to: int | None = None) -> torch.Tensor:
     """log p of the tokens at the given storage indices (each from the previous token)."""
-    h, t = forward_seq(model, seq, mode)
+    h, t = forward_seq(model, seq, mode, _pad(mode, pad_to))
     idx = torch.as_tensor(index, device=h.device)
     return -target_ce(model, h, t["ids"], idx, reduction="none")

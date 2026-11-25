@@ -12,6 +12,7 @@ export DATA=${DATA:-/content/data/srd}
 export RUNS=${RUNS:-/content/runs}
 export LOGS=${LOGS:-/content/logs}
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export VLLM_NO_USAGE_STATS=1 DO_NOT_TRACK=1 HF_HUB_DISABLE_TELEMETRY=1   # no usage reports sent out
 export PATH=/content/venv-srd/bin:$PATH      # vLLM / torch.compile build kernels with the venv's ninja
 export HF_HOME=${HF_HOME:-/content/hf}
 mkdir -p "$LOGS" "$RUNS" "$DRIVE/markers" 2>/dev/null

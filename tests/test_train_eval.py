@@ -58,8 +58,9 @@ def test_gates():
     d = rng.random(n) < 0.5
     b = d | (rng.random(n) < 0.1)                 # (b) better than (d) by ~5 points
     f = b.copy()
-    out = p0_decision(_q(b.astype(float)), _q(d.astype(float)), _q(f.astype(float)), pre)
-    assert out["gate_pass"] and not out["pi_large"] and "main design" in out["action"]
+    out = p0_decision(_q(f.astype(float)), _q(d.astype(float)), _q(b.astype(float)), pre)
+    assert out["gate_pass"] and not out["pi_large"] and "go to S1" in out["action"]
+    assert p0_decision(_q(d.astype(float)), _q(d.astype(float)), None, pre)["gate_pass"] is False
     sr = [_q((d | (rng.random(n) < 0.08)).astype(float)) for _ in range(3)]
     nm = [_q(d.astype(float)) for _ in range(3)]
     r = rq1(sr, nm, [], [], pre)
@@ -146,3 +147,23 @@ def test_tiny_sft_learns_and_resumes(tmp_path, branch):
     assert tr2.step == tr.step
     tr2.run()
     assert tr2.step > tr.step
+
+
+def test_teacher_shards_merge_to_global_quotas():
+    """Several teacher processes (each a share of questions and quotas) merge back to the global quotas."""
+    from srd.teacher import collect, merge, quotas, shard_quotas, split_total
+
+    assert sum(split_total(3000, i, 4) for i in range(4)) == 3000
+    mix = {"multihop": 0.5, "paraphrase": 0.15, "fictional": 0.15, "multiseg": 0.1, "nocontext": 0.1}
+    g = quotas(3000, mix)
+    assert {t: sum(shard_quotas(3000, mix, i, 4)[t] for i in range(4)) for t in mix} == g
+    samples = [make_sample(n=8, seed=i, gold_pos=(1, 5), qid=f"q{i}") for i in range(24)]
+    samples += [make_sample(n=8, seed=100 + i, qid=f"n{i}", nocontext=True) for i in range(8)]
+    mix2 = {"multihop": 0.75, "nocontext": 0.25}
+    parts = []
+    for i in range(2):
+        recs, st = collect(ScriptedPolicy(), samples[i::2], 12, mix2, DriverConfig(), RewardConfig(),
+                           want=shard_quotas(12, mix2, i, 2), log=lambda m: None)
+        parts.append(recs)
+    out, stats = merge(parts, quotas(12, mix2), 12)
+    assert stats["got"] == {"multihop": 9, "nocontext": 3} and len({r["qid"] for r in out}) == 12

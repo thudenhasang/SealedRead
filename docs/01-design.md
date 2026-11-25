@@ -19,25 +19,23 @@ Nhờ vậy, thông tin từ C chỉ đến được phần suy luận qua văn 
 | Engine vLLM (`engine/vllm_policy.py`) | Prompt lấy từ `Seq.prompt_ids()`: bỏ bản gốc `<locate>` đã ẩn, giữ bản sao đúng vị trí |
 | Phép thử (`eval/probes.py`) | Chạy forward toàn chuỗi với đúng mask của nhánh |
 
-## Hai tầng cài đặt (D1)
-- **Tầng 1: vLLM gốc, hai luồng (Mục 3.7).**
-  - Luồng che không chứa C: `[A][Q][Q'][T']` cộng lịch sử, vị trí rút gọn (Phụ lục A).
-  - Luồng `<locate>` chứa C: `[A][Q][C][Q'][T']` cộng lịch sử.
-  - Hai luồng tương đương về thông tin với một chuỗi. Prefix cache của vLLM lo phần lặp lại.
-  - Nhánh Không mask chạy một luồng có C. Bỏ bản gốc `<locate>`, giữ bản sao tại chỗ thì KV *trùng khít* với chuỗi đơn.
-  - Huấn luyện khớp từng token: nhánh `sealedread` dùng view `masked` (compact) cho các thẻ che, cộng view `locate` cho `<locate>`.
-- **Tầng 2: một chuỗi, khung đầy đủ (thiết kế chính).**
-  - Hiện chạy bằng engine tham chiếu: đúng tuyệt đối nhưng chậm. Đủ cho P0 (b)(c)(e), cho phép thử, ablation pha suy luận ở quy mô nhỏ, và làm chuẩn đối chiếu.
-  - Plugin vLLM cho một chuỗi là spike E0 có giới hạn thời gian. Nếu không xong, tầng 1 là phương án dự phòng mà đề xuất đã định nghĩa.
-  - Hệ quả: dùng tầng 1 thì Δ_mask đo *gộp* tác dụng của che và dồn vị trí (Phụ lục A). Bài phải nói rõ điều này. Nhánh `sealedread_chain` (tầng 2) đo tách riêng.
+## Cài đặt: hai luồng (D1)
+- **Luồng suy luận** không chứa C: `[A][Q][Q'][T']` cộng lịch sử, vị trí liền sau Q (khung rút gọn, Phụ lục A cũ). Viết `<reason>`, `<query>`, `<recheck>`, `<answer>`.
+- **Luồng `<locate>`** chứa C: `[A][Q][C][Q'][T']` cộng lịch sử. Chỉ viết được ID (ngữ pháp). vLLM cache phần `[A][Q][C]` nên mỗi câu chỉ tính C một lần.
+- Engine dán đoạn được chọn vào lịch sử chung của hai luồng.
+- Hai luồng **tương đương về thông tin** với một chuỗi: luồng suy luận không hề chứa C, nên kênh rò 1–4 bị bịt theo cấu trúc.
+- Huấn luyện khớp từng token: nhánh `sealedread` dùng view `masked` (compact) cho các thẻ che, cộng view `locate` cho `<locate>`.
+- Nhánh Không mask chạy một luồng có C, khung đầy đủ. Bỏ bản gốc `<locate>`, giữ bản sao tại chỗ thì KV *trùng khít* với chuỗi đơn.
+- **Hệ quả:** Δ_mask đo tác dụng gộp của việc che và khoảng cách vị trí ngắn. P0 cấu hình (b) (cùng mask, khung đầy đủ) đo phần do vị trí (Π) để báo cáo kèm.
+- Engine tham chiếu (một chuỗi, mọi nhánh, chậm) chỉ dùng cho test, cho P0 (b), và cho DA-ft tùy chọn.
 
 ## Các nhánh (Bảng 10)
 | Nhánh | Pha che thấy C? | Bằng chứng | Huấn luyện (view) | Suy luận |
 |---|---|---|---|---|
-| `sealedread` | Không | đoạn dán, mã hóa khi che C | masked(compact) + locate | vLLM hai luồng |
-| `sealedread_chain` | Không | như trên, khung đầy đủ | chain | engine tham chiếu |
+| `sealedread` (chính) | Không | đoạn dán, mã hóa khi che C | masked(compact) + locate | vLLM hai luồng |
+| `sealedread_chain` (không chạy) | Không | như trên, khung đầy đủ | chain | engine tham chiếu |
 | `nomask` | Có | đoạn dán, mã hóa khi thấy C | chain | vLLM một luồng |
-| `daft` | Không, trừ đoạn đã mở | KV gốc của các đoạn đã chọn (khối dán rỗng) | chain | engine tham chiếu |
+| `daft` (tùy chọn, D22) | Không, trừ đoạn đã mở | KV gốc của các đoạn đã chọn (khối dán rỗng) | chain | engine tham chiếu |
 | `rag` | Không | retriever thay `<locate>` | masked(compact) | vLLM, luồng che |
 | `sealong` | Có (full attention) | không có giao thức | plain | vLLM |
 

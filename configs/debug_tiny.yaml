@@ -7,3 +7,4 @@ protocol:
 lora: {r: 8, alpha: 16}
 train: {branch: sealedread, lr: 0.01, epochs: 2, batch_traces: 4, warmup_steps: 1, patience: 2, grad_ckpt: true,
         attn: dense, pad_to: 1}
+retriever: {kind: bm25}       # no model download on CPU

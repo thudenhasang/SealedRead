@@ -87,16 +87,23 @@ def build_all(b: dict, shards_dir: str | Path, out: str | Path, count: Callable[
     train_items = load_items(shards_dir, list(b["train_shards"]), list(b["datasets"]))
     eval_items = load_items(shards_dir, [b["eval_shard"]], list(b["datasets"]))
     log(f"{len(train_items)} train items, {len(eval_items)} eval items")
+    # the passage pool (distractors, filler) is fixed by `pool_shards` + the eval shard and taken BEFORE the
+    # closed-book filter: changing the train settings never changes the contexts of dev / test (D25)
+    pool_shards = list(b.get("pool_shards") or b["train_shards"])
+    pool_items = train_items if pool_shards == list(b["train_shards"]) else \
+        load_items(shards_dir, pool_shards, list(b["datasets"]))
+    pool = PassagePool(pool_items + eval_items)
     if b.get("closed_book_filter"):
         solved = {r["qid"] for r in read_jsonl(b["closed_book_filter"]) if r.get("correct")}
         before = len(train_items)
         train_items = [it for it in train_items if f"{it.dataset}-{it.qid}" not in solved]
         log(f"closed-book filter: {before - len(train_items)} train items dropped")
-    pool = PassagePool(train_items + eval_items)
     bcfg = BuildConfig(b.get("max_seg_tokens", 256), b.get("min_seg_tokens", 32), b.get("hard_distractors", 8))
     builder = Builder(pool, count, bcfg, seed)
     rng.shuffle(train_items)
-    rng.shuffle(eval_items)
+    # dev / test come from their own random stream: the same questions whatever the train settings (number of
+    # train items, closed-book filter)
+    random.Random(f"{seed}|eval").shuffle(eval_items)
     manifest: dict = {"seed": seed, "files": {}}
     share = b["train"].get("multiseg_enumeration_share", 0.5)
     for split in ("train", "val", "reserve"):

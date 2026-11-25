@@ -20,24 +20,22 @@ def _avg_seeds(seeds: list[Q]) -> Q:
     return {k: (seeds[0][k][0], sum(s[k][1] for s in seeds) / len(seeds)) for k in keys}
 
 
-def p0_decision(b: Q, d: Q, f: Q, pre: dict) -> dict:
-    """b, d, f: configs (b), (d), (f) with both lengths merged (keys carry the length)."""
+def p0_decision(f: Q, d: Q, b: Q | None, pre: dict) -> dict:
+    """Main design = two streams, compact frame (docs/decisions.md D1). Configs with both lengths merged.
+
+    Gate:        Delta_oracle = EM(f) - EM(d): oracle paste, C masked + compact frame (SealedRead as deployed)
+                 against oracle paste without mask (the control); >= delta_oracle_min with CI lower bound > 0.
+    Diagnostic:  Pi = EM(f) - EM(b): what the compact frame alone adds (b = same mask, full frame). Reported with
+                 Delta_mask in the paper as the positional share of the joint effect; it does not change the plan.
+    """
     p0 = pre["p0"]
-    oracle = scale(paired_bootstrap(b, d))
-    pi = scale(paired_bootstrap(f, b))
+    oracle = scale(paired_bootstrap(f, d))
     gate = oracle["delta"] >= p0["delta_oracle_min"] and oracle["lo"] > 0
-    big = pi["delta"] >= p0["pi_large"] and pi["lo"] > 0
-    if gate and not big:
-        action = "keep the main design (sandwich layout); go to S1"
-    elif gate and big:
-        action = ("deploy the compact frame (appendix A); re-measure (b) on 500 questions per length with it; keep "
-                  "it if Pi drops by at least half; then S1")
-    elif not gate and not big:
-        action = "switch to the RQ1 fallback narrative now; provenance (RQ4) becomes the main axis"
-    else:
-        action = ("try the compact frame first: re-measure Delta_oracle with (b) in the compact frame; if the gate "
-                  "passes use it and go to S1, otherwise the fallback narrative")
-    return {"delta_oracle": oracle, "pi": pi, "gate_pass": gate, "pi_large": big, "action": action}
+    pi = scale(paired_bootstrap(f, b)) if b else None
+    action = ("keep the design (two streams, compact frame); go to S1" if gate else
+              "switch to the RQ1 fallback narrative now; provenance (RQ4) becomes the main axis")
+    return {"delta_oracle": oracle, "gate_pass": gate, "pi": pi,
+            "pi_large": bool(pi and pi["delta"] >= p0["pi_large"] and pi["lo"] > 0), "action": action}
 
 
 def s1_decision(sr: Q, nm: Q, pre: dict) -> dict:

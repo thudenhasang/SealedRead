@@ -42,11 +42,40 @@ def quotas(total: int, mix: dict[str, float]) -> dict[str, int]:
     return q
 
 
+def split_total(total: int, i: int, n: int) -> int:
+    """Share i of n of an integer (the shares sum to total)."""
+    return total // n + (1 if i < total % n else 0)
+
+
+def shard_quotas(total: int, mix: dict[str, float], i: int, n: int) -> dict[str, int]:
+    """The global quota of every type, split across n teacher processes (shares sum to the global quotas)."""
+    return {t: split_total(q, i, n) for t, q in quotas(total, mix).items()}
+
+
+def merge(parts: list[list[dict]], want: dict[str, int] | None, total: int) -> tuple[list[dict], dict]:
+    """Merge the trace files of several teacher processes; keep each type within its global quota."""
+    got: Counter = Counter()
+    seen: set[str] = set()
+    out: list[dict] = []
+    for recs in parts:
+        for r in recs:
+            t = r.get("qtype", "all")
+            cap = want.get(t, 0) if want else total
+            if r["qid"] in seen or got[t] >= cap or len(out) >= total:
+                continue
+            seen.add(r["qid"])
+            got[t] += 1
+            out.append(r)
+    return out, {"want": want or {"all": total}, "got": dict(got), "total": len(out)}
+
+
 def collect(policy, samples: list[Sample], total: int, mix: dict[str, float], drv: DriverConfig, rcfg: RewardConfig,
             attempts: int = 4, batch: int = 64, student_count=None, retriever=None, seed: int = 0,
-            log=print) -> tuple[list[dict], dict]:
-    """Run the teacher over `samples` (shuffled) until every type's quota is filled or samples run out."""
-    want = quotas(total, mix)
+            log=print, want: dict[str, int] | None = None) -> tuple[list[dict], dict]:
+    """Run the teacher over `samples` (shuffled) until every type's quota is filled or samples run out.
+    `want`: explicit quotas (one share of the global quotas when several teacher processes run in parallel)."""
+    want = dict(want) if want is not None else quotas(total, mix)
+    total = sum(want.values())
     got: Counter = Counter()
     reasons: Counter = Counter()
     per_type_tries: dict[str, int] = defaultdict(int)

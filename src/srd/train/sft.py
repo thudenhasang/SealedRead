@@ -30,8 +30,11 @@ from srd.train.data import TraceItem, load_traces, sample_index, sequences
 def _dist():
     ws = int(os.environ.get("WORLD_SIZE", "1"))
     if ws > 1 and not torch.distributed.is_initialized():
-        torch.distributed.init_process_group("nccl")
-        torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", "0")))
+        if torch.cuda.is_available():
+            torch.distributed.init_process_group("nccl")
+            torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", "0")))
+        else:                                             # CPU: lets the multi-process path be tested without GPUs
+            torch.distributed.init_process_group("gloo")
     rank = torch.distributed.get_rank() if ws > 1 else 0
     return rank, ws
 

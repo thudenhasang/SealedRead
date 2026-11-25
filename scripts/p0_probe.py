@@ -6,12 +6,13 @@
     (d) oracle paste, C not masked, sandwich                     vLLM, nomask
     (e) oracle original KV of the segments of G, no paste        reference engine, daft chain (C prefilled)
     (f) as (b) with C removed and positions compacted            vLLM, masked mode (compact frame)
-vLLM and the reference engine do not share a GPU: run them in two processes.
+Main design = two streams, compact frame: the gate compares (f) with (d); (b) only measures Pi (positional share);
+(c) and (e) are optional. vLLM and the reference engine do not share a GPU: run them in two processes.
 
     python scripts/p0_probe.py configs/s0.yaml --configs a,d,f
-    python scripts/p0_probe.py configs/s0.yaml --configs b,c,e
+    python scripts/p0_probe.py configs/s0.yaml --configs b
     python scripts/p0_probe.py configs/s0.yaml --recall          (zero-shot <locate> Recall@K per chunk size)
-    python scripts/report.py p0 /content/runs/s0                  (gate and decision of table 6)
+    python scripts/report.py p0 /content/runs/s0                  (gate (f) vs (d), and Pi)
 """
 from __future__ import annotations
 
@@ -106,7 +107,8 @@ def main() -> int:
                 from srd.engine.vllm_policy import VLLMPolicy
 
                 pol = VLLMPolicy(engine, tok, prompts, "nomask" if c == "d" else "masked", proto)
-            evaluate(pol, samples, 1, drv, rcfg, path, prompts, extra={"config": c}, log=log)
+            evaluate(pol, samples, 1, drv, rcfg, path, prompts, extra={"config": c}, log=log,
+                     batch=1 if backend == "ref" else 128)      # reference engine: one KV cache at a time
     print("P0_DONE")
     return 0
 

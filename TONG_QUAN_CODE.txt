@@ -1,0 +1,256 @@
+TỔNG QUAN CODE DỰ ÁN SEALEDREAD
+Ngày: 21/11/2026 — dựa trên đề xuất SealedRead bản 2.4 và khuôn repo keychain-dv
+=====================================================================
+
+1. TÓM TẮT
+----------
+- Repo gồm khoảng 9.000 dòng: thư viện Python (src/srd) khoảng 5.100 dòng, script và test khoảng 2.900 dòng,
+  còn lại là config, tài liệu và notebook.
+- Gói Python tên "srd", cài bằng: pip install -e ".[train,dev]"
+- 93 test chạy trên CPU (76 hàm test, một số chạy với nhiều tham số), tất cả đều qua.
+- Bài chạy thử toàn chuỗi trên CPU (scripts/smoke.py) đi hết 7 bước trong khoảng 2 phút.
+- Phần chạy trên GPU (vLLM, teacher, đo chi phí, parity...) ĐÃ VIẾT NHƯNG CHƯA CHẠY LẦN NÀO,
+  vì máy dùng để code không có GPU và không vào được Hugging Face.
+
+Ý tưởng được cài đặt: phần suy luận (<reason>, <query>, <recheck>, <answer>) không bao giờ nhìn thấy
+ngữ cảnh dài C. Chỉ <locate> được nhìn C, và chỉ được xuất 1–3 ID đoạn. Sau đó engine dán nguyên văn
+các đoạn được chọn vào <knowledge>.
+
+
+2. CẤU TRÚC THƯ MỤC
+-------------------
+sealedread/
+  README.md               giới thiệu, bảng trạng thái, bắt đầu nhanh
+  TONG_QUAN_CODE.txt      file này
+  pyproject.toml          gói "srd"; nhóm cài thêm: train, infer (vllm), data, rag, dev
+  configs/                cấu hình YAML theo từng giai đoạn
+  docs/                   tài liệu tiếng Việt (01–06 và nhật ký quyết định)
+  notebooks/              notebook Colab
+  scripts/                mỗi bước một lệnh
+  scripts/colab/          pipeline trên Colab A100
+  scripts/cluster/        pipeline trên máy 8×B200
+  src/srd/                thư viện chính
+  tests/                  test CPU
+  tools/colab.py          client cầu nối Colab (lấy nguyên từ keychain-dv)
+
+
+3. THƯ VIỆN CHÍNH (src/srd/)
+----------------------------
+
+3.1 Lõi giao thức
+  protocol.py (254 dòng)
+    - 6 thẻ, kiểu Step (một bước của lời giải), ProtoConfig (K = 3, R_max = 8, trần token từng thẻ).
+    - Máy trạng thái next_tag(): reason → query → locate → knowledge → recheck → ...
+    - Đọc alpha/beta; ở vòng R_max thì ép alpha=answer.
+    - validate(): liệt kê mọi vi phạm giao thức của Mục 5.1 (sai thứ tự, thiếu alpha/beta, ID không tồn
+      tại / lặp / đã dán, vượt trần token, không đúng một <answer>...).
+    - Đã sửa so với đề xuất: ở vòng R_max, reject_and_requery chuyển sang <reason> (quyết định D3).
+
+  grammar.py (106 dòng)
+    - LocateTrie: ràng buộc ở mức token cho <locate> (1–3 ID khác nhau, có trong C, chưa dán).
+      Dùng cho engine tham chiếu.
+    - locate_regex(): cùng ràng buộc dưới dạng regex, cho guided decoding của vLLM.
+
+  prompts.py (103 dòng)
+    - Hướng dẫn A (giải thích giao thức cho mô hình).
+    - Bố cục kẹp [A][Q][C][Q'][T'].
+    - Cách hiển thị đoạn: [[S_k]] (Tiêu đề / Mục) văn bản [[/S_k]].
+    - Prompt full-attention cho các baseline.
+
+  layout.py (278 dòng) — NGUỒN DUY NHẤT CỦA MASK
+    - Dựng chuỗi token của một trace. Mỗi token mang: loại (A, Q, C, Q', T', GEN, LOC, CPY, KNOW),
+      vòng, position ID, có phải target của loss hay không.
+    - visible(): quy tắc attend (phương trình 1 và Hình 1b) cho 3 nhánh: sealedread, nomask, daft.
+      Có thêm 2 ablation: tắt quy tắc ẩn <locate>; <locate> chỉ đọc <query> của nó.
+    - 3 view:
+        chain   chuỗi đơn (thiết kế chính)
+        masked  không có C; khung vị trí "full" (nhảy |C| vị trí) hoặc "compact" (Phụ lục A)
+        locate  luồng <locate> của engine hai luồng
+    - Bản sao <locate> dùng lại vị trí của bản gốc, nội dung là ID đã sắp theo giá trị (sửa D2).
+    - Seq.prompt_ids(): bỏ các bản gốc <locate> đã bị ẩn, dùng làm prompt cho vLLM.
+
+  tok.py (106 dòng)
+    - HFTok (tokenizer thật) và ByteTok (tokenizer theo byte, dùng cho test CPU).
+    - Tokenization chuẩn theo "mảnh": mọi nơi trong code ghép token giống hệt nhau (D4).
+
+  reward.py (97 dòng)
+    - R_μ (phương trình 4 và 5), F2, Acc (phương trình 2), R_ans (EM; F1 tập hợp cho câu liệt kê).
+    - Hỗ trợ biến thể "không cổng" của RQ3.
+
+  text.py, config.py, cli.py
+    - Chuẩn hóa văn bản, EM/F1.
+    - Config YAML có extends và override bằng dòng lệnh, đọc được biến môi trường ${DATA}, ${RUNS}.
+    - Tiện ích chung cho các script.
+
+3.2 Dữ liệu (src/srd/data/)
+  qa.py         Đọc bản ghi gốc của HotpotQA / 2Wiki / MuSiQue (cùng shard với keychain-dv).
+                Lấy câu hỗ trợ ở mức câu, thứ tự bước (hops), loại đáp án (mở/đóng).
+  chunk.py      Chia đoạn ≤ 256 token theo ranh giới câu; gộp đoạn < 32 token trong cùng tài liệu.
+  ids.py        ID ngẫu nhiên 1–9999, tránh các số đứng độc lập trong văn bản (năm, số đếm...).
+  bm25.py       BM25 tự viết, dùng để lấy nhiễu khó và làm retriever cho RAG.
+  leak.py       Lọc đoạn nhiễu làm rò đáp án, theo loại đáp án (Mục 4.2).
+  fiction.py    Đổi tên thực thể hư cấu nhất quán trong toàn bộ mẫu.
+  synth.py      Câu không cần ngữ cảnh (số học, logic); câu đếm/liệt kê từ 2Wiki.
+  build.py      Dựng một mẫu: đoạn chuẩn + nhiễu của chính câu hỏi + nhiễu BM25 + filler cho đủ ngân
+                sách token; xáo thứ tự; gán ID; xác định G.
+  splits.py     Dựng toàn bộ các tập: train 7.000 câu theo tỉ lệ Bảng 4, val 1.500, reserve,
+                dev 32K/64K/128K, test 32K/64K/128K, test hư cấu.
+  checks.py     Kiểm tra 1, 3, 4, 5 (đọc thêm file closed-book cho kiểm tra 2), kiểm tra cấu trúc,
+                chạy agent giả lập để xác nhận mọi mẫu giải được qua giao thức.
+                Kiểm tra 3 dùng hồi quy logistic, tính AUC.
+  paraphrase.py Prompt viết lại câu hỏi và kiểm tra câu mới vẫn giữ đáp án.
+  benchmarks.py Chuyển QASPER / NarrativeQA / QuALITY sang định dạng mẫu, độn thêm tài liệu khác.
+  sample.py     Kiểu Sample / Segment / Hop; đọc/ghi jsonl.
+
+3.3 Mô hình (src/srd/model/)
+  qwen3.py      Tự cài Qwen3 (RMSNorm, RoPE và YaRN, GQA, q/k norm, SwiGLU). Hỗ trợ mask tường minh,
+                position ID tùy chỉnh, KV cache có thể cắt bớt. Đọc trọng số safetensors chính thức.
+                Từ chối kiến trúc hybrid (điều kiện (i) của Tính chất 1). Đã test khớp
+                transformers.Qwen3ForCausalLM.
+  attention.py  SDPA (causal hoặc mask dense) và FlexAttention. make_mask_mod() là cùng quy tắc với
+                layout.visible() (có test so khớp).
+  lora.py       LoRA trên mọi lớp tuyến tính; lưu/đọc theo định dạng PEFT để vLLM nạp được.
+  run.py        Forward toàn chuỗi; cross-entropy chia khối trên token target; log-prob.
+
+3.4 Engine (src/srd/engine/)
+  driver.py       Chạy giao thức cho nhiều episode cùng lúc: máy trạng thái, kiểm tra <locate>,
+                  engine dán, chế độ oracle (P0), retriever (RAG), hoán vị ID (RQ4), chế độ lenient
+                  cho zero-shot.
+  ref.py          Engine tham chiếu: chính xác cho mọi nhánh và ablation, chậm.
+                  Có test: trace nó sinh ra trùng từng token và mask với chuỗi của trainer.
+  vllm_engine.py  Bọc vLLM: prefix cache, LoRA, regex cho <locate>, prompt log-probs.
+  vllm_policy.py  Engine nhanh. two_stream cho SealedRead (luồng che không có C, vị trí rút gọn; luồng
+                  <locate> có C). nomask: một luồng. masked: cho RAG.        [CHƯA CHẠY TRÊN GPU]
+  retriever.py    BM25; dense + reranker (sentence-transformers).
+  plain.py        Baseline full attention, chép-rồi-giải, RAG một lượt.
+  scripted.py     Agent giả lập theo các bước của mẫu (dùng cho test, kiểm tra dữ liệu, chạy thử).
+  factory.py      Tạo policy theo nhánh và backend từ config.
+
+3.5 Huấn luyện
+  train/data.py   Trace → chuỗi huấn luyện theo nhánh:
+                    sealedread        view masked + view locate (khớp engine hai luồng)
+                    sealedread_chain  chuỗi đơn
+                    nomask, daft      chuỗi đơn với mask tương ứng
+                    rag               view masked
+                    sealong           chuỗi thường (full attention)
+  train/sft.py    Trainer SFT: LoRA hoặc full FT, FlexAttention trên GPU, gradient checkpointing, lịch
+                  learning rate warmup + cosine, dừng sớm theo loss validation, lưu checkpoint và chạy
+                  tiếp, giới hạn thời gian (TIME_CAP / TRAIN_DONE như repo cũ), nhiều GPU bằng torchrun.
+  rest_em.py      Một vòng ReST-EM: lọc cứng, câu "học được" (1–3/4 mẫu đạt), giữ ≤ 2 mẫu xếp theo R_μ,
+                  trần 4.000 mẫu; 3 biến thể của RQ3 (soft / hard / nogate).
+  teacher.py      Lọc trace teacher (đúng đáp án, recall ≥ 0,5, hợp lệ 100% theo tokenizer của học
+                  sinh), hạn ngạch theo loại câu.
+
+3.6 Đánh giá (src/srd/eval/)
+  metrics.py  EM, F1, precision/recall của <locate>, "đúng mà không nhìn", tỉ lệ nhảy bước, UCR,
+              số vòng, chạm R_max, mở ngữ cảnh khi |G| = 0. Tách đáp án mở/đóng.
+  stats.py    Bootstrap ghép cặp theo cụm, cỡ mẫu (1.744), SE, cỡ mẫu cho kiểm định không-kém-hơn.
+  gates.py    Các quyết định chốt trước: cổng P0 + Bảng 6, điểm quyết định sau S1, LoRA so với full FT,
+              cổng S2, RQ1 (thành công / dự phòng / âm), RQ2, vòng 2.
+  probes.py   Phép thử bất biến và phụ thuộc (Mục 3.6), đo KL ở mọi vị trí pha che.
+  runner.py   Chạy đánh giá, ghi mỗi episode một dòng; chạy tiếp được; chia theo GPU.
+
+
+4. SCRIPT (scripts/)
+--------------------
+Chạy được trên CPU (đã thử):
+  build_data.py        dựng mọi file mẫu
+  check_data.py        kiểm tra dữ liệu với ngưỡng chốt trước
+  train_sft.py         SFT / M-step cho một nhánh
+  report.py            tóm tắt kết quả và các quyết định (p0, s1, s2, rq1, rq2, round2, compare)
+  smoke.py             chạy thử toàn chuỗi trên CPU
+  make_scripted_traces.py  trace giả lập hợp lệ (đo chi phí SFT, bù trace khi diễn tập) - KHÔNG dùng để huấn luyện thật
+  tokenizer_check.py   kiểm tra giả định về tokenizer (cần tải tokenizer từ Hugging Face)
+  fetch_data.py        lấy shard (từ keychain-dv)
+
+Cần GPU (ĐÃ VIẾT, CHƯA CHẠY):
+  closed_book.py       lọc closed-book và kiểm tra 2
+  paraphrase.py        viết lại câu hỏi cho loại 2
+  p0_probe.py          6 cấu hình S0 (a–f), Recall@K
+  teacher_traces.py    trace teacher: giao thức / RAG / CoT; pilot để lấy trần token p99; chạy song song
+                       nhiều tiến trình và gộp bằng --merge
+  rest_em.py           sinh mẫu và lọc ReST-EM
+  evaluate.py          đánh giá mọi nhánh, baseline và ablation
+  probes.py            phép thử mask trên trajectory thật
+  parity.py            kiểm tra 6: khớp log-prob giữa vLLM, FlexAttention và mask dense
+  cost_probe.py        đo chi phí (tốc độ engine, thời gian một bước SFT, VRAM; LoRA trong vLLM có tác dụng)
+  fetch_benchmarks.py  QASPER / NarrativeQA / QuALITY
+
+Colab (scripts/colab/): common, setup, persist, restore (theo quy ước repo cũ), cộng thêm run_sft,
+  run_rehearsal (diễn tập toàn chuỗi với Qwen3-0.6B) và run_measure (đo đạc nhỏ với 4B: tokenizer, dữ
+  liệu thử, parity, chi phí, và S0 thử nghiệm ở 64K cho tín hiệu "có nên làm tiếp", D26). S0 chính thức
+  chạy trên máy lớn (D25). Kế hoạch: docs/07-colab-test-plan.md.
+Cluster (scripts/cluster/): env, setup, par.sh (mỗi GPU một phần câu hỏi), train.sh (torchrun),
+  pipeline.sh (các giai đoạn s0, s1a, s1b, s2, s4, s5).
+
+
+5. CẤU HÌNH (configs/)
+----------------------
+  base.yaml        giá trị chung: Qwen3-4B-Instruct-2507, K = 3, R_max = 8, λ = 0,2, μ = 0,25, LoRA r = 64
+  prereg.yaml      mọi ngưỡng chốt trước (commit trước S0)
+  data.yaml        dựng dữ liệu (Bảng 4, kích thước các tập)
+  s0.yaml          cấu hình P0
+  teacher.yaml     teacher (tên checkpoint cần kiểm tra trên Hugging Face)
+  sft.yaml         SFT
+  rest_em.yaml     ReST-EM
+  eval.yaml        đánh giá
+  benchmarks.yaml  benchmark tài liệu thật
+  debug_tiny.yaml  chạy thử trên CPU
+  debug_small.yaml diễn tập 0.6B trên Colab
+
+
+6. TEST (tests/, 93 test)
+-------------------------
+  test_protocol.py     máy trạng thái, các vi phạm, ngữ pháp trie/regex
+  test_reward.py       từng dòng Bảng 5; ngưỡng hòa vốn 2,6% và 14%
+  test_layout.py       từng ô Hình 1b, position ID của bản sao, các view, ablation
+  test_model.py        khớp transformers; KV cache khớp forward toàn chuỗi; Flex khớp dense; LoRA
+                       lưu/đọc; Tính chất 1 (SealedRead bất biến, Không mask và DA-ft rò rỉ)
+  test_engine.py       driver và agent giả lập; engine tham chiếu sinh trace trùng layout của trainer
+  test_data.py         đọc bản ghi, chia đoạn, ID, lọc rò, dựng mẫu, các kiểm tra, thực thể hư cấu
+  test_train_eval.py   chuỗi theo nhánh, SFT tí hon (loss giảm, chạy tiếp được), chọn lọc ReST-EM,
+                       chỉ số, bootstrap, các cổng
+  test_probes_bench.py phép thử bất biến/phụ thuộc, bộ chuyển đổi benchmark
+
+
+7. TÀI LIỆU (docs/)
+-------------------
+  README.md            bảng đối chiếu từng mục của đề xuất với code và test
+  01-design.md         thiết kế, hai tầng cài đặt, các nhánh
+  02-data.md           dữ liệu
+  03-protocol.md       giao thức, token, mask, position ID
+  04-training-plan.md  các giai đoạn, lệnh, cổng quyết định
+  05-running.md        chạy trên máy cá nhân, Colab, 8×B200
+  06-evaluation.md     chỉ số, RQ1–RQ5, ablation, lệnh báo cáo
+  decisions.md         nhật ký quyết định D0–D26
+  07-colab-test-plan.md  kế hoạch thử nghiệm trên Colab Pro; results/colab-test.md: mẫu ghi kết quả
+
+
+8. NHỮNG ĐIỂM CẦN BIẾT
+----------------------
+a) Thiết kế chính (chốt): HAI LUỒNG trên vLLM gốc. Luồng suy luận không chứa C (vị trí liền sau Q), luồng
+   <locate> chứa C. Δ_mask đo tác dụng gộp của che và vị trí; P0 (b) đo phần do vị trí (Π). DA-ft là tùy
+   chọn. Không cần plugin vLLM. Xem decisions.md D1, D22, D23.
+b) Các chỗ đã sửa so với đề xuất bản 2.4: bản sao <locate> (D2), quy tắc ở vòng R_max (D3).
+c) Đề nghị chờ nhóm duyệt: biên không-kém-hơn ở 32K (D7), biến thể RQ3 (D6), chứng minh Tính chất 1
+   (D8), bổ sung pilot full FT vào bản ngân sách tối giản (D15).
+d) Chưa kiểm chứng được: tên checkpoint teacher, tên dataset benchmark trên Hugging Face, tokenizer thật
+   (D16). Đơn giá SFT sẽ thay bằng số đo thật (D17).
+e) Dữ liệu tổng hợp của bài chạy thử bị kiểm tra bề mặt bắt lỗi (AUC 0,71). Đây là hành vi đúng: dữ liệu
+   tổng hợp khác về hình thức. Dữ liệu thật sẽ được đo lại.
+f) Lấy lại từ keychain-dv: config.py, các quy ước Colab, tools/colab.py, fetch_data.py, cách đọc shard.
+g) Sửa sau khi soát lại cho A100: KV cache tăng dần khoảng 1/8 thay vì gấp đôi (tránh cấp thêm khoảng
+   19 GB sau khi prefill 128K); engine tham chiếu chạy từng câu một ở ngữ cảnh dài; đường chạy nhiều GPU
+   của trainer đã thử bằng 2 tiến trình trên CPU (gloo): loss và grad_norm trùng khít với chạy 1 tiến trình.
+h) Retriever mặc định của RAG chuyển sang dense + reranker theo Mục 6.1 (D20); BM25 chỉ còn dùng cho test và
+   để dựng nhiễu khó. Teacher chạy 4 tiến trình song song trên 8 GPU rồi gộp bằng --merge (D21): S1a nhanh
+   hơn khoảng 3–4 lần so với một tiến trình.
+
+
+9. VIỆC TIẾP THEO
+-----------------
+1. Đẩy lên GitHub (git init → add → commit → remote add → push), rồi sửa REPO_URL trong notebook.
+2. Colab Pro theo docs/07-colab-test-plan.md: run_rehearsal.sh (0.6B, bắt lỗi GPU), rồi run_measure.sh
+   (4B: parity, chi phí, P0 thu nhỏ). Điền kết quả vào docs/results/colab-test.md.
+3. Commit configs/prereg.yaml (ghi hash vào D0) trước khi chạy S0 thật trên máy lớn.
+4. Chỉ chuyển sang 8×B200 (scripts/cluster/pipeline.sh) khi parity đạt và đã có số đo chi phí.

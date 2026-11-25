@@ -6,6 +6,8 @@ build:
   min_seg_tokens: 32
   hard_distractors: 8
   train_shards: [0, 1, 2, 3, 4, 10, 11, 12, 13, 14]
+  pool_shards: [0, 1, 2, 3, 4, 10, 11, 12, 13, 14]   # passages for distractors / filler (fixed: dev/test contexts
+                                                     # do not move when train settings or the closed-book filter change)
   eval_shard: 90
   datasets: [hotpotqa, 2wikimultihopqa, musique]
   train:

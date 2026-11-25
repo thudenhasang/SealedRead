@@ -2,12 +2,13 @@
 
 | Trang | Nội dung |
 |---|---|
-| [01-design.md](01-design.md) | Thiết kế tóm tắt: ý tưởng, hai tầng cài đặt, các nhánh so sánh, Tính chất 1 trong code |
+| [01-design.md](01-design.md) | Thiết kế tóm tắt: ý tưởng, cài đặt hai luồng, các nhánh so sánh, Tính chất 1 trong code |
 | [02-data.md](02-data.md) | Nguồn dữ liệu, cách dựng mẫu, 5 loại câu, tách tập, kiểm tra dữ liệu |
 | [03-protocol.md](03-protocol.md) | Thẻ, máy trạng thái, tokenization chuẩn, bố cục token, mask và position ID của từng nhánh |
 | [04-training-plan.md](04-training-plan.md) | Các giai đoạn S0–S5: lệnh, cổng quyết định, chạy ở đâu |
 | [05-running.md](05-running.md) | Chạy trên máy cá nhân, Colab và máy 8×B200 |
 | [06-evaluation.md](06-evaluation.md) | Chỉ số, RQ1–RQ5, phép thử, ablation, lệnh báo cáo |
+| [07-colab-test-plan.md](07-colab-test-plan.md) | **Kế hoạch thử nghiệm trên Colab Pro** và tiêu chí để lên máy lớn; ghi kết quả vào [results/colab-test.md](results/colab-test.md) |
 | [decisions.md](decisions.md) | Nhật ký quyết định, gồm các chỗ sửa so với bản đề xuất 2.4 |
 
 ## Từ đề xuất đến code

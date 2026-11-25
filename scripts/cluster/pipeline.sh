@@ -1,30 +1,31 @@
 #!/usr/bin/env bash
 # The plan of table 7 on the GPU machine, stage by stage. Each stage is one function; run them one at a time and
 # read the decision files before going on (the gates are pre-registered: configs/prereg.yaml).
-#   bash scripts/cluster/pipeline.sh s0 | s1a | s1b | s2 | s3 | s4 | s5
+#   bash scripts/cluster/pipeline.sh s0 | s1a | s1b | s2 | s4 | s5   (optional: daft)
 source "$(dirname "$0")/env.sh"
 SEEDS=${SEEDS:-"0 1 2"}
 D="data.samples=[$DATA/train.jsonl,$DATA/val.jsonl,$DATA/reserve.jsonl]"
 TR="teacher.samples=$DATA/train.jsonl teacher.reserve=$DATA/reserve.jsonl teacher.out=$RUNS/teacher"
 
-s0() {   # measurements without training (section 5.2)
+s0() {   # the OFFICIAL S0 (section 5.2, D23/D25): commit configs/prereg.yaml first
   bash scripts/cluster/par.sh closed_book scripts/closed_book.py configs/base.yaml --samples $DATA/test_64k.jsonl \
     $DATA/test_fict_64k.jsonl --out $RUNS/closed_book/heldout.jsonl
   NUM_SHARDS=4 bash scripts/cluster/par.sh p0_vllm scripts/p0_probe.py configs/s0.yaml --configs a,d,f
-  NUM_SHARDS=4 bash scripts/cluster/par.sh p0_ref scripts/p0_probe.py configs/s0.yaml --configs b,c,e
+  bash scripts/cluster/par.sh p0_ref scripts/p0_probe.py configs/s0.yaml --configs b        # Pi only
   $PY scripts/report.py p0 $RUNS/s0 --out $RUNS/s0/p0_decision.json
 }
 
-s1a() {  # teacher traces (tensor parallel 2: one process per pair of GPUs is simplest; here one process, TP from config)
-  $PY scripts/teacher_traces.py configs/teacher.yaml --mode protocol $TR $PATHS
-  $PY scripts/teacher_traces.py configs/teacher.yaml --mode protocol --val 300 $TR $PATHS
-  $PY scripts/teacher_traces.py configs/teacher.yaml --mode rag $TR $PATHS
-  $PY scripts/teacher_traces.py configs/teacher.yaml --mode cot $TR $PATHS
+s1a() {  # teacher traces: 4 processes x tensor parallel 2 on 8 GPUs, each on its share; then merge the shares
+  for M in "--mode protocol" "--mode protocol --val 300" "--mode rag" "--mode cot"; do
+    GPUS_PER_PROC=2 bash scripts/cluster/par.sh "teacher_${M//[^a-z0-9]/_}" scripts/teacher_traces.py \
+      configs/teacher.yaml $M $TR || return 1
+    $PY scripts/teacher_traces.py configs/teacher.yaml $M --merge $TR $PATHS || return 1
+  done
 }
 
 s1b() {  # SFT: every core branch x seed on the same traces; LoRA vs full FT pilot
   T="data.train=$RUNS/teacher/traces_protocol.jsonl data.val=$RUNS/teacher/traces_val.jsonl $D"
-  for B in sealedread nomask daft; do for S in $SEEDS; do
+  for B in sealedread nomask; do for S in $SEEDS; do
     bash scripts/cluster/train.sh configs/sft.yaml train.branch=$B run.seed=$S run.name=sft_${B}_s$S $T; done; done
   bash scripts/cluster/train.sh configs/sft.yaml train.branch=rag run.name=sft_rag_s0 $D \
     data.train=$RUNS/teacher/traces_rag.jsonl data.val=$RUNS/teacher/traces_val.jsonl
@@ -62,6 +63,16 @@ s5() {   # evaluation (table 8); see docs/06-evaluation.md for the full list and
     bash scripts/cluster/par.sh eval_${B}_$S scripts/evaluate.py configs/eval.yaml eval.branch=$B eval.tag=${B}_s$S \
       engine.adapter=$RUNS/rest_${B}_s$S/best/adapter eval.out=$RUNS/eval; done; done
   bash scripts/cluster/par.sh eval_plain scripts/evaluate.py configs/eval.yaml eval.branch=plain eval.out=$RUNS/eval
+}
+
+daft() { # optional (D22): DA-ft at SFT level, 1 seed, evaluated on 500 questions at 64K with the reference engine
+  T="data.train=$RUNS/teacher/traces_protocol.jsonl data.val=$RUNS/teacher/traces_val.jsonl $D"
+  bash scripts/cluster/train.sh configs/sft.yaml train.branch=daft run.name=sft_daft_s0 $T
+  for B in daft sealedread; do
+    bash scripts/cluster/par.sh eval_ctx_$B scripts/evaluate.py configs/eval.yaml eval.branch=$B eval.tag=ctx_$B \
+      engine.backend=ref engine.adapter=$RUNS/sft_${B}_s0/best/adapter "eval.files=[$DATA/test_64k.jsonl]" \
+      eval.limit=500 eval.out=$RUNS/eval
+  done
 }
 
 "$@"

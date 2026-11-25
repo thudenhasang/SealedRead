@@ -11,6 +11,7 @@ export PY=${PY:-$WORK/venv/bin/python}
 export NGPU=${NGPU:-$(nvidia-smi -L 2>/dev/null | wc -l)}
 export HF_HOME=${HF_HOME:-$WORK/hf}
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export VLLM_NO_USAGE_STATS=1 DO_NOT_TRACK=1 HF_HUB_DISABLE_TELEMETRY=1   # no usage reports sent out
 export PATH=$WORK/venv/bin:$PATH
 mkdir -p "$DATA" "$RUNS" "$LOGS"
 cd "$REPO"

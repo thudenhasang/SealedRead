@@ -1,7 +1,7 @@
 """Summaries and the pre-registered decisions from result files (CPU).
 
     python scripts/report.py summary <records.jsonl>...                       aggregate metrics per file
-    python scripts/report.py p0 <s0 dir>                                      Delta_oracle, Pi, table 6 action
+    python scripts/report.py p0 <s0 dir> [--pilot 5]                          gate EM(f) - EM(d), Pi (+ pilot reading)
     python scripts/report.py s1 --sr <files> --nm <files>                     decision point after S1 (dev 64K)
     python scripts/report.py s2 --sr <files> --a <files>                      gate before S2 (validity, EM vs (a))
     python scripts/report.py rq1 --sr <seed files...> --nm <seed files...> [--sr32 ... --nm32 ...]
@@ -26,6 +26,21 @@ from srd.eval import gates  # noqa: E402
 from srd.eval.metrics import aggregate, by_question  # noqa: E402
 from srd.eval.runner import load_records  # noqa: E402
 from srd.eval.stats import paired_bootstrap, scale  # noqa: E402
+
+
+def pilot_reading(r: dict, strong: float) -> str:
+    """How to read a small pilot S0 (not pre-registered, not the official gate): r in points."""
+    lo, hi, dlt = r["lo"], r["hi"], r["delta"]
+    if lo > 0 and dlt >= strong:
+        return "clear positive signal: masking helps zero-shot when the evidence is right -> go on"
+    if hi < 0 and dlt <= -strong:
+        return ("clear negative signal: look at the traces first (format, prompt, Q') before the GPU machine; "
+                "the fallback narrative is likely")
+    if lo > 0:
+        return "positive but small: go on; the official S0 on the GPU machine gives the firm number"
+    if hi < 0:
+        return "negative but small: go on with care; check the traces; the official S0 decides"
+    return "inconclusive (the CI contains 0): go on; the official S0 on the GPU machine decides"
 
 
 def recs(files: list[str]) -> list[dict]:
@@ -53,6 +68,8 @@ def main() -> int:
     ap.add_argument("--key", default="em")
     ap.add_argument("--prereg", default="configs/prereg.yaml")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--pilot", type=float, default=None,
+                    help="p0 only: add a reading for a small pilot S0, with this effect size (points) as 'clear'")
     args = ap.parse_args()
     pre = yaml.safe_load(open(args.prereg))
     split = (lambda s: s.split(",") if s else [])
@@ -61,13 +78,29 @@ def main() -> int:
     elif args.cmd == "p0":
         d = Path(args.files[0])
         ls = pre["p0"]["lengths"]
-        get = (lambda c: q([str(d / f"{c}_{L // 1024}k*.jsonl") for L in ls]))
-        res = gates.p0_decision(get("b"), get("d"), get("f"), pre)
+
+        def get(c):
+            pats = [str(d / f"{c}_{L // 1024}k*.jsonl") for L in ls]
+            pats = [p for p in pats if glob.glob(p)]
+            if not pats:
+                raise FileNotFoundError(f"no result file for config ({c}) under {d}")
+            return q(pats)
+
+        def opt(c):
+            try:
+                return get(c) or None
+            except FileNotFoundError:
+                return None
+
+        res = gates.p0_decision(get("f"), get("d"), opt("b"), pre)
+        res["lengths_used"] = sorted({int(Path(p).stem.split("_")[1].split("k")[0]) for p in glob.glob(str(d / "f_*k*.jsonl"))})
+        if args.pilot is not None:
+            res["pilot_reading"] = pilot_reading(res["delta_oracle"], args.pilot)
         res["other"] = {}
-        for x, y, name in (("b", "c", "sandwich_gain"), ("b", "a", "b_minus_a"), ("e", "b", "e_minus_b")):
+        for x, y, name in (("f", "a", "f_minus_a"), ("b", "c", "sandwich_gain"), ("e", "b", "e_minus_b")):
             try:
                 res["other"][name] = scale(paired_bootstrap(get(x), get(y)))
-            except ValueError:
+            except (ValueError, FileNotFoundError):        # optional configs (c), (e) may not have run
                 pass
     elif args.cmd == "s1":
         res = gates.s1_decision(q(split(args.sr)), q(split(args.nm)), pre)

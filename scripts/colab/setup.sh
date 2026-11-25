@@ -10,7 +10,7 @@ mkdir -p /content/logs
 command -v uv >/dev/null 2>&1 || pip install -q uv
 [ -x "$VENV/bin/python" ] || uv venv "$VENV" --python 3.12
 uv pip install --python "$VENV/bin/python" "$VLLM_SPEC"
-uv pip install --python "$VENV/bin/python" -e "$REPO[train,data,dev]"
+uv pip install --python "$VENV/bin/python" -e "$REPO[train,data,rag,dev]"
 "$VENV/bin/python" - <<'PYEOF'
 import torch, transformers, vllm
 print("torch", torch.__version__, "cuda", torch.version.cuda, "| vllm", vllm.__version__,

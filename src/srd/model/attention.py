@@ -35,6 +35,13 @@ def flex_fn(compile: bool | None = None):
     if not compile:
         return flex_attention
     if _FLEX is None:
+        import torch._dynamo as dynamo
+
+        # one compiled kernel per padded length: the default limit (8) would silently fall back to the eager
+        # version, which materializes the full score matrix (out of memory at 16K+)
+        for name in ("cache_size_limit", "recompile_limit"):
+            if hasattr(dynamo.config, name):
+                setattr(dynamo.config, name, max(64, getattr(dynamo.config, name)))
         _FLEX = torch.compile(flex_attention, dynamic=False)
     return _FLEX
 
@@ -130,5 +137,11 @@ def flex_mask(t: dict[str, torch.Tensor], opts: MaskOpts, block_size: int = 128)
     from torch.nn.attention.flex_attention import create_block_mask
 
     n = t["kind"].shape[0]
-    return create_block_mask(make_mask_mod(t, opts), None, None, n, n, device=t["kind"].device,
-                             BLOCK_SIZE=block_size)
+    dev = t["kind"].device
+    kw = dict(device=dev, BLOCK_SIZE=block_size)
+    if dev.type == "cuda":           # compiled mask construction: the eager one builds an n x n grid (GBs at 24K)
+        try:
+            return create_block_mask(make_mask_mod(t, opts), None, None, n, n, _compile=True, **kw)
+        except TypeError:
+            pass
+    return create_block_mask(make_mask_mod(t, opts), None, None, n, n, **kw)

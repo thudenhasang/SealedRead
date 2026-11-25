@@ -15,7 +15,7 @@ Mã nguồn của đề xuất SealedRead (bản 2.4). Ý tưởng chính: phầ
 | Dữ liệu (M1): chia đoạn, ID ngẫu nhiên, nhiễu BM25, lọc rò, thực thể hư cấu, 5 loại câu, kiểm tra 1/3/4/5 | Xong, có test CPU trên bản ghi tổng hợp đúng định dạng gốc |
 | SFT (mọi nhánh), ReST-EM (chọn lọc, RQ3), teacher (lọc, hạn ngạch), đánh giá, bootstrap, các cổng chốt trước, phép thử mask | Xong, có test CPU. Chạy thử toàn chuỗi trên CPU: `scripts/smoke.py` |
 | Engine nhanh trên vLLM (hai luồng / một luồng), script GPU (S0, teacher, parity, đo chi phí, đánh giá, benchmark) | **Đã viết, chưa chạy trên GPU.** Lần chạy đầu: `scripts/colab/run_rehearsal.sh` (Qwen3-0.6B trên A100) |
-| Engine một chuỗi trên vLLM (bố cục chính ở tốc độ cao) | Chưa làm: spike E0. Hiện chạy bằng engine tham chiếu (chậm), xem [docs/decisions.md](docs/decisions.md) D1 |
+| Thiết kế cài đặt | **Hai luồng trên vLLM gốc** (luồng suy luận không chứa C). Không cần plugin vLLM, xem [docs/decisions.md](docs/decisions.md) D1 |
 
 ## Bắt đầu nhanh
 
@@ -26,7 +26,7 @@ python -m venv .venv && .venv/bin/pip install -e ".[train,dev]"
 .venv/bin/python scripts/smoke.py
 ```
 
-**Colab (A100):** mở [notebooks/colab_quickstart.ipynb](notebooks/colab_quickstart.ipynb). Thứ tự: diễn tập với Qwen3-0.6B, rồi dữ liệu thật, rồi S0. Chi tiết ở [docs/05-running.md](docs/05-running.md).
+**Colab Pro:** làm theo [docs/07-colab-test-plan.md](docs/07-colab-test-plan.md): diễn tập 0.6B (`run_rehearsal.sh`), rồi đo đạc 4B (`run_measure.sh`). Notebook: [notebooks/colab_quickstart.ipynb](notebooks/colab_quickstart.ipynb).
 
 **Máy lớn (8×B200):** `scripts/cluster/` gồm `setup.sh`, `par.sh` (mỗi GPU một phần câu hỏi), `train.sh` (torchrun) và `pipeline.sh` (các giai đoạn S0 → S5).
 
@@ -52,7 +52,7 @@ src/srd/
   train/            data (view theo nhánh), sft (trainer)
   rest_em.py, teacher.py
   eval/             metrics, stats (bootstrap cụm ghép cặp), gates (cổng chốt trước), probes (bất biến/phụ thuộc), runner
-tests/              test CPU (pytest), 91 test
+tests/              test CPU (pytest), 93 test
 tools/colab.py      client cầu nối Colab (giữ nguyên từ keychain-dv)
 ```
 

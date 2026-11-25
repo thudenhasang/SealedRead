@@ -181,3 +181,29 @@ def test_item_of_roundtrip(built):
 
 def test_standalone_numbers():
     assert standalone_numbers("in 1961, 3 films; S_871 and v2.5") == {1961, 3}
+
+
+def test_dev_test_selection_does_not_depend_on_train_settings(tmp_path):
+    """D25: a dev set built with small train settings (Colab) equals the one built with the full settings."""
+    import json
+
+    from srd.data.sample import read_jsonl
+    from srd.data.splits import build_all
+
+    sh = tmp_path / "shards"
+    sh.mkdir()
+    (sh / "2wikimultihopqa_s0.json").write_text(json.dumps([wiki_record(i) for i in range(60)]))
+    (sh / "2wikimultihopqa_s1.json").write_text(json.dumps([wiki_record(i) for i in range(100, 150)]))
+    (sh / "2wikimultihopqa_s90.json").write_text(json.dumps([wiki_record(i) for i in range(1000, 1040)]))
+
+    def build(n_train, out, shards):
+        b = {"train_shards": shards, "pool_shards": [0, 1], "eval_shard": 90, "datasets": ["2wikimultihopqa"], "max_seg_tokens": 64,
+             "min_seg_tokens": 8, "hard_distractors": 2,
+             "train": {"n": n_train, "length": [500, 700], "mix": {"multihop": 1.0}},
+             "val": {"n": 4, "length": [500, 700]}, "reserve": {"n": 2, "length": [500, 700]},
+             "dev": {"n": 10, "lengths": {800: 10}}, "test": {"n": 10, "lengths": {800: 10}}}
+        build_all(b, sh, out, approx_tokens, seed=3, log=lambda m: None)
+        return [(d["qid"], [g["sid"] for g in d["segments"]]) for d in read_jsonl(out / "dev_0k.jsonl")]
+
+    # different train settings (size, shards) with the same passage pool -> the same dev questions AND contexts
+    assert build(10, tmp_path / "a", [0]) == build(30, tmp_path / "b", [0, 1])

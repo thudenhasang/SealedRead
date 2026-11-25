@@ -21,12 +21,12 @@
 |---|---|---|
 | RQ1 Δ_mask | `evaluate.py eval.branch={sealedread,nomask} eval.tag=<b>_s<seed> engine.adapter=…` trên test 64K/128K/32K | `report.py rq1 --sr a,b,c --nm a,b,c --sr32 … --nm32 …` |
 | RQ1 so trên cùng đoạn dán | `eval.oracle=true` cho cả hai nhánh | `report.py compare` |
-| RQ1 Δ_ctx | `eval.branch=daft engine.backend=ref` (SFT) và `sealedread` (SFT) | `report.py compare` |
+| RQ1 Δ_ctx (tùy chọn, D22) | `pipeline.sh daft` | `report.py compare` |
 | RQ2 với RAG | `fetch_benchmarks.py`; `eval.branch=rag` (multi-round, đã huấn luyện), `rag1` (một lượt); `sealedread` | `report.py rq2 --key f1` |
 | RQ2 hoán đổi bộ chọn | `eval.branch=sealedread` với `locate` thay bằng retriever: chạy nhánh `rag` bằng adapter của SealedRead; oracle G: `eval.oracle=true` | `report.py compare` |
 | RQ3 cổng thưởng | `pipeline.sh s4` (lọc lại soft / hard / nogate rồi chạy M-step) | `report.py compare` và "đúng mà không nhìn" |
-| RQ4 (a) kiểm thử cài đặt | `probes.py --branch sealedread` | `invariant_rate`: phải bằng 1 |
-| RQ4 (b) mức rò | `probes.py --branch nomask/daft`; `eval.hide_locate=false engine.backend=ref` | KL |
+| RQ4 (a) kiểm thử cài đặt | Hai luồng: prompt của luồng suy luận không chứa token nào của C (test `test_masked_view_full_vs_compact`); chuỗi đơn: `probes.py --branch sealedread` | KL phải bằng 0 |
+| RQ4 (b) mức rò | `probes.py --branch nomask` (và `daft` nếu chạy D22) | KL |
 | RQ4 (c) kênh ID | `eval.permute_ids=true`; tỉ lệ nhảy bước trong mọi bản tóm tắt | `report.py compare` |
 | RQ4 (d) quy nguồn | UCR trong bản tóm tắt (tập hư cấu kỳ vọng ≈ 0) | `report.py summary` |
 | RQ5 tổng quát hóa | Δ_mask theo từng mốc 32K/64K/128K; NoLiMa, BABILong (file mẫu theo định dạng `Sample`) | `report.py rq1` theo từng file |
@@ -40,12 +40,11 @@
 **Ablation pha suy luận** (checkpoint SealedRead seed 1, 128K, 500 câu):
 - `eval.repeat_q=false` (chỉ Q trước C);
 - `prompts.show_titles=false`;
-- `eval.locate_query_only=true`;
-- `eval.hide_locate=false engine.backend=ref`.
+- `eval.locate_query_only=true`.
 
 ## Engine nào chạy được gì
 | Cần | vLLM (nhanh) | Engine tham chiếu (chậm, chính xác) |
 |---|---|---|
 | SealedRead hai luồng, Không mask, RAG, plain | có | có (trừ plain) |
-| Bố cục chính một chuỗi (khung đầy đủ), DA-ft, tắt quy tắc ẩn | không | có |
+| Chuỗi đơn khung đầy đủ (P0 (b)), DA-ft | không | có |
 | Phép thử bất biến / phụ thuộc | không | có (FlexAttention trên GPU) |

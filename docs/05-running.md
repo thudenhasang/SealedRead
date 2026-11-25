@@ -3,7 +3,7 @@
 ## Máy cá nhân (CPU)
 ```bash
 python -m venv .venv && .venv/bin/pip install -e ".[train,dev]"
-.venv/bin/python -m pytest -q          # 91 test, khoảng 1 phút
+.venv/bin/python -m pytest -q          # 93 test, khoảng 1 phút
 .venv/bin/python scripts/smoke.py      # chạy thử cả chuỗi trên dữ liệu tổng hợp với mô hình tí hon
 ```
 Dữ liệu thật có thể dựng trên CPU, đếm token xấp xỉ:
@@ -38,6 +38,8 @@ python scripts/build_data.py --config configs/data.yaml --shards-dir $WORK/shard
 bash scripts/cluster/pipeline.sh s0              # rồi s1a, s1b, s2, s4, s5 sau khi đọc các quyết định
 ```
 - `par.sh <tên> <script> <config> [overrides]`: chạy một script trên mọi GPU, mỗi GPU một phần câu hỏi.
+  Với `GPUS_PER_PROC=2`, mỗi tiến trình nhận 2 GPU (teacher 27B, tensor parallel 2): 4 tiến trình song song.
+  Sau đó gộp bằng `teacher_traces.py ... --merge`.
 - `train.sh <config> [overrides]`: torchrun trên mọi GPU.
 
 **Phiên bản:** ghi `uv pip freeze` vào `logs/`. Pin phiên bản vLLM đã chạy được ở bước đo chi phí (`VLLM_SPEC=vllm==x.y.z`). API structured output của vLLM có đổi tên giữa các bản; `vllm_engine._structured` thử cả hai tên.
