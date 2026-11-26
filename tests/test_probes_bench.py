@@ -64,3 +64,24 @@ def test_quality_conversion():
     docs = quality_docs([rec])
     assert docs[0]["qas"][0]["answers"][0] == "B"
     assert disambiguate("What do they propose?", "X") == "In the paper 'X', what do they propose?"
+
+
+def test_chain_equals_masked_view_on_masked_tokens(sample, tok, prompts):
+    """S0 config (b) runs without C: the masked view must give the chain's masked-phase log-probs exactly."""
+    from srd.eval.probes import chain_vs_masked
+
+    r = chain_vs_masked(_tiny(), sample, trace_two_rounds(sample), tok, prompts)
+    assert r["positions"] > 50 and r["max"] < 1e-4
+
+
+def test_overfit_verdict():
+    import importlib.util
+    import pathlib
+
+    spec = importlib.util.spec_from_file_location(
+        "check_overfit", pathlib.Path(__file__).resolve().parents[1] / "scripts" / "check_overfit.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.verdict([4.0, 2.0, 0.5, 0.2, 0.1, 0.1], 0.3, 0.2)["pass"]
+    assert not mod.verdict([4.0, 3.9, 3.8, 3.8, 3.7, 3.9], 0.3, 0.2)["pass"]
+    assert not mod.verdict([4.0, 1.0], 0.3, 0.2)["pass"]

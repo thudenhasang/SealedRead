@@ -3,7 +3,7 @@
 ## Máy cá nhân (CPU)
 ```bash
 python -m venv .venv && .venv/bin/pip install -e ".[train,dev]"
-.venv/bin/python -m pytest -q          # 94 test, khoảng 1 phút
+.venv/bin/python -m pytest -q          # 96 test, khoảng 1 phút
 .venv/bin/python scripts/smoke.py      # chạy thử cả chuỗi trên dữ liệu tổng hợp với mô hình tí hon
 ```
 Dữ liệu thật có thể dựng trên CPU, đếm token xấp xỉ:
@@ -35,6 +35,7 @@ export WORK=/data/sealedread                     # đĩa nhanh
 bash scripts/cluster/setup.sh                    # venv: vLLM + repo; chạy test
 python scripts/fetch_data.py --from-hf --out $WORK/shards
 python scripts/build_data.py --config configs/data.yaml --shards-dir $WORK/shards --out $WORK/data/srd
+bash scripts/cluster/bringup.sh                  # ngày đầu: parity, chi phí, nhiều GPU; phải ra BRINGUP_PASS
 bash scripts/cluster/pipeline.sh s0              # rồi s1a, s1b, s2, s4, s5 sau khi đọc các quyết định
 ```
 - `par.sh <tên> <script> <config> [overrides]`: chạy một script trên mọi GPU, mỗi GPU một phần câu hỏi.

@@ -52,7 +52,15 @@ Ngày: ____ · GPU: ____ (40 / 80 GB) · vLLM: ____ · torch: ____ · commit: __
 | VRAM đỉnh (GB) | | |
 | độ dài chuỗi trung bình (token) | | |
 
-**S0 thử nghiệm ở 64K (câu hỏi từ shard train; không phải cổng chính thức):**
+**Kiểm tra mask trên 4B thật:**
+| Kiểm tra | sealedread | nomask | Đạt? |
+|---|---|---|---|
+| Overfit 20 trace: loss đầu → cuối | | | |
+| Bất biến: KL lớn nhất / nhiễu | | (mức rò) | |
+| Phụ thuộc: độ sụt log-prob khi đổi đáp án | | | |
+| Chuỗi có mask = chuỗi ngắn (p99 / nhiễu) | | – | |
+
+**S0 thử nghiệm (câu hỏi từ shard train; không phải cổng chính thức). Mốc 64K:**
 | Cấu hình | Số câu | EM | format_fixes |
 |---|---|---|---|
 | (a) full attention | 100 | | – |
@@ -67,9 +75,11 @@ Ngày: ____ · GPU: ____ (40 / 80 GB) · vLLM: ____ · torch: ____ · commit: __
 | EM(f) − EM(a) | | |
 | Recall@3 của `<locate>` zero-shot (100 câu) | | – |
 
-`pilot_reading`: ____ → quyết định: làm tiếp / xem lại trace trước
+**Mốc 32K** (150 câu mỗi cấu hình): EM(f) − EM(d) = ____ [____, ____] · Π = ____
 
-**Teacher pilot (nếu có A100 80 GB):** trần p99: reason __ / query __ / recheck __ / answer __ · tỉ lệ qua lọc: __
+`pilot_reading` (64K): ____ · (32K): ____ → quyết định: làm tiếp / xem lại trace trước
+
+**Teacher pilot (G4: 100 câu):** trần p99: reason __ / query __ / recheck __ / answer __ · tỉ lệ qua lọc: __ · giây / episode: __ · ước lượng trên GPU này: 2.000 trace __ giờ, 3.000 trace __ giờ
 
 ## D. Ước lượng cho máy 8×B200
 | Hạng mục | Từ số đo (A100) | Quy đổi B200 | So với Bảng 7–8 |

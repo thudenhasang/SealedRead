@@ -5,11 +5,13 @@
 ## Trước khi thuê máy lớn (Colab A100)
 | Bước | Lệnh | Điều kiện đi tiếp |
 |---|---|---|
-| Test CPU | `pytest -q`, `python scripts/smoke.py` | 94 test qua, `SMOKE_DONE` |
+| Test CPU | `pytest -q`, `python scripts/smoke.py` | 96 test qua, `SMOKE_DONE` |
 | Thử nghiệm trên Colab Pro | [07-colab-test-plan.md](07-colab-test-plan.md) | các tiêu chí đạt ở cuối file đó |
 | Chi phí SFT | `python scripts/cost_probe.py configs/sft.yaml --part sft --steps 5` | s/bước, VRAM đỉnh → cập nhật Bảng 7 |
 
 ## Trên máy 8×B200 (`scripts/cluster/pipeline.sh <giai đoạn>`)
+**Ngày đầu:** `bash scripts/cluster/bringup.sh` (khoảng 1–2 giờ): những gì Colab không kiểm được (kernel B200, tốc độ thật, nhiều GPU). Có `BRINGUP_PASS` thì mới sang S0.
+
 | Giai đoạn | Việc | Lệnh / script | Quyết định chốt trước |
 |---|---|---|---|
 | S0 | P0: (a), (d), (f) và (b) nhỏ; Recall@K, closed-book, pilot teacher | `pipeline.sh s0`, `report.py p0` | Cổng P0: EM(f) − EM(d) ≥ 2 (D23); Π báo cáo kèm |

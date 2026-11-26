@@ -28,7 +28,7 @@ python -m venv .venv && .venv/bin/pip install -e ".[train,dev]"
 
 **Colab Pro:** làm theo [docs/07-colab-test-plan.md](docs/07-colab-test-plan.md): diễn tập 0.6B (`run_rehearsal.sh`), rồi đo đạc 4B (`run_measure.sh`). Notebook: [notebooks/colab_quickstart.ipynb](notebooks/colab_quickstart.ipynb).
 
-**Máy lớn (8×B200):** `scripts/cluster/` gồm `setup.sh`, `par.sh` (mỗi GPU một phần câu hỏi), `train.sh` (torchrun) và `pipeline.sh` (các giai đoạn S0 → S5).
+**Máy lớn (8×B200):** `scripts/cluster/` gồm `setup.sh`, `bringup.sh` (kiểm tra ngày đầu), `par.sh` (mỗi GPU một phần câu hỏi), `train.sh` (torchrun) và `pipeline.sh` (các giai đoạn S0 → S5).
 
 ## Cấu trúc repo
 ```
@@ -52,7 +52,7 @@ src/srd/
   train/            data (view theo nhánh), sft (trainer)
   rest_em.py, teacher.py
   eval/             metrics, stats (bootstrap cụm ghép cặp), gates (cổng chốt trước), probes (bất biến/phụ thuộc), runner
-tests/              test CPU (pytest), 94 test
+tests/              test CPU (pytest), 96 test
 tools/colab.py      client cầu nối Colab (giữ nguyên từ keychain-dv)
 ```
 

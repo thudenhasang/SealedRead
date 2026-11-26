@@ -68,6 +68,7 @@ def main() -> int:
     ap.add_argument("--key", default="em")
     ap.add_argument("--prereg", default="configs/prereg.yaml")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--lengths", default=None, help="p0 only: comma-separated lengths instead of prereg's")
     ap.add_argument("--pilot", type=float, default=None,
                     help="p0 only: add a reading for a small pilot S0, with this effect size (points) as 'clear'")
     args = ap.parse_args()
@@ -77,7 +78,7 @@ def main() -> int:
         res = {Path(f).name: aggregate(load_records(f)) for f in args.files}
     elif args.cmd == "p0":
         d = Path(args.files[0])
-        ls = pre["p0"]["lengths"]
+        ls = [int(x) for x in args.lengths.split(",")] if args.lengths else pre["p0"]["lengths"]
 
         def get(c):
             pats = [str(d / f"{c}_{L // 1024}k*.jsonl") for L in ls]
@@ -93,7 +94,7 @@ def main() -> int:
                 return None
 
         res = gates.p0_decision(get("f"), get("d"), opt("b"), pre)
-        res["lengths_used"] = sorted({int(Path(p).stem.split("_")[1].split("k")[0]) for p in glob.glob(str(d / "f_*k*.jsonl"))})
+        res["lengths_used"] = [L for L in ls if glob.glob(str(d / f"f_{L // 1024}k*.jsonl"))]
         if args.pilot is not None:
             res["pilot_reading"] = pilot_reading(res["delta_oracle"], args.pilot)
         res["other"] = {}

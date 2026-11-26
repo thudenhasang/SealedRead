@@ -113,8 +113,12 @@ def main() -> int:
     drv = DriverConfig(proto=proto, locator="retriever" if mode == "rag" else "model")
     retr = make_retriever(to_plain(cfg.get("retriever"))) if mode == "rag" else None
     if "--pilot" in flags:
+        import time
+
         ss = samples[: t["pilot"]]
+        t0 = time.time()
         eps = run_episodes(pol, ss, 1, drv, retriever=retr)
+        secs = time.time() - t0
         lens = defaultdict(list)
         why = defaultdict(int)
         for ep in eps:
@@ -124,8 +128,15 @@ def main() -> int:
                 if st.tag in MASKED_TAGS:
                     lens[st.tag].append(count(st.text))
         caps = {k: int(math.ceil(np.percentile(v, 99))) for k, v in lens.items() if v}
-        write_json(out / "pilot.json", {"caps_p99": caps, "filter": dict(why), "n": len(eps)})
-        log(f"pilot: caps (p99, student tokens) {caps}; filter {dict(why)}")
+        rate = why.get("ok", 0) / max(1, len(eps))
+        # one episode per question here; the real run tries up to 4 per question until one passes, all batched
+        per_ep = secs / max(1, len(eps))
+        est = {f"hours_for_{k}_traces": (round(k / rate * per_ep / 3600, 1) if rate else None) for k in (2000, 3000)}
+        write_json(out / "pilot.json", {"caps_p99": caps, "filter": dict(why), "n": len(eps), "pass_rate": rate,
+                                        "seconds": round(secs, 1), "seconds_per_episode": round(per_ep, 2),
+                                        "same_gpu_estimate": est})
+        log(f"pilot: caps (p99, student tokens) {caps}; filter {dict(why)}; pass rate {rate:.2f}; "
+            f"{per_ep:.1f} s per episode -> {est}")
         print("TEACHER_PILOT_DONE")
         return 0
     want = shard_quotas(total, t["mix"], i, n)

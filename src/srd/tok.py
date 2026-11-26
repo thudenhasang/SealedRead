@@ -96,7 +96,7 @@ class ByteTok:
 
 
 def load_tok(name: str) -> Tok:
-    return ByteTok() if name in ("bytes", "byte") else HFTok(name)
+    return ByteTok() if name in ("bytes", "byte", "tiny") else HFTok(name)
 
 
 def encode_pieces(tok: Tok, pieces: list[str]) -> list[int]:

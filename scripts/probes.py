@@ -1,6 +1,7 @@
 """RQ4 (a)/(b): invariance and dependence probes on trajectories from evaluation records (GPU, our Qwen3 +
 FlexAttention; dense on CPU for tests).
 
+    (--records: evaluation records with steps, or a trace file such as the output of make_scripted_traces.py)
     python scripts/probes.py configs/eval.yaml --records /content/runs/eval/sealedread__test_64k.jsonl \
         --samples /content/data/srd/test_64k.jsonl --branch sealedread [--n 200] engine.adapter=...
 Branches: sealedread (expected invariant: an implementation test), nomask and daft (the leak they measure).
@@ -38,7 +39,8 @@ def main() -> int:
     mode = "flex" if model.device.type == "cuda" else "dense"
     branch = _flag(flags, "--branch", "sealedread")
     by = {s.qid: s for s in load_samples(_flag(flags, "--samples"))}
-    recs = [r for r in load_records(_flag(flags, "--records")) if r.get("valid") and r.get("steps")]
+    # evaluation records, or plain trace files (make_scripted_traces.py) that carry no "valid" field
+    recs = [r for r in load_records(_flag(flags, "--records")) if r.get("valid", True) and r.get("steps")]
     recs = recs[: int(_flag(flags, "--n", 200))]
     out = Path(_flag(flags, "--out", str(Path(cfg.eval.out) / f"probes_{branch}.jsonl")))
     rows = []
@@ -64,6 +66,10 @@ def main() -> int:
             "dependence_drop_median": float(np.median(drops)) if drops else None}
     write_json(out.with_suffix(".summary.json"), summ)
     log(json.dumps(summ))
+    if branch in ("sealedread", "sealedread_chain"):        # an implementation test: must be invariant
+        print("INVARIANCE_PASS" if summ["invariant_rate"] == 1.0 else "INVARIANCE_FAILED (a mask bug)")
+    else:
+        print(f"LEAK_MEASURED {branch}: invariant on {summ['invariant_rate']:.0%} of the traces (expected: low)")
     print("PROBES_DONE")
     return 0
 

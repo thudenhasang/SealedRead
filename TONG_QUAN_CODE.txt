@@ -7,7 +7,7 @@ Ngày: 21/11/2026 — dựa trên đề xuất SealedRead bản 2.4 và khuôn r
 - Repo gồm khoảng 9.000 dòng: thư viện Python (src/srd) khoảng 5.100 dòng, script và test khoảng 2.900 dòng,
   còn lại là config, tài liệu và notebook.
 - Gói Python tên "srd", cài bằng: pip install -e ".[train,dev]"
-- 94 test chạy trên CPU (77 hàm test, một số chạy với nhiều tham số), tất cả đều qua.
+- 96 test chạy trên CPU (79 hàm test, một số chạy với nhiều tham số), tất cả đều qua.
 - Bài chạy thử toàn chuỗi trên CPU (scripts/smoke.py) đi hết 7 bước trong khoảng 2 phút.
 - Phần chạy trên GPU (vLLM, teacher, đo chi phí, parity...) ĐÃ VIẾT NHƯNG CHƯA CHẠY LẦN NÀO,
   vì máy dùng để code không có GPU và không vào được Hugging Face.
@@ -160,6 +160,8 @@ Chạy được trên CPU (đã thử):
   report.py            tóm tắt kết quả và các quyết định (p0, s1, s2, rq1, rq2, round2, compare)
   smoke.py             chạy thử toàn chuỗi trên CPU
   make_scripted_traces.py  trace giả lập hợp lệ (đo chi phí SFT, bù trace khi diễn tập) - KHÔNG dùng để huấn luyện thật
+  check_overfit.py     kiểm tra một run overfit có đưa loss về gần 0 không (target / mask đúng)
+  equivalence_check.py chuỗi có mask và chuỗi ngắn nhảy vị trí cho cùng log-prob trên mô hình thật
   tokenizer_check.py   kiểm tra giả định về tokenizer (cần tải tokenizer từ Hugging Face)
   fetch_data.py        lấy shard (từ keychain-dv)
 
@@ -177,11 +179,12 @@ Cần GPU (ĐÃ VIẾT, CHƯA CHẠY):
   fetch_benchmarks.py  QASPER / NarrativeQA / QuALITY
 
 Colab (scripts/colab/): common, setup, persist, restore (theo quy ước repo cũ), cộng thêm run_sft,
-  run_rehearsal (diễn tập toàn chuỗi với Qwen3-0.6B) và run_measure (đo đạc nhỏ với 4B: tokenizer, dữ
-  liệu thử, parity, chi phí, và S0 thử nghiệm ở 64K cho tín hiệu "có nên làm tiếp", D26). S0 chính thức
-  chạy trên máy lớn (D25). Kế hoạch: docs/07-colab-test-plan.md.
+  run_rehearsal (diễn tập toàn chuỗi với Qwen3-0.6B) và run_measure (đo đạc với 4B: tokenizer, dữ liệu
+  thử, parity, chi phí, kiểm tra mask trên mô hình thật, S0 thử nghiệm ở 64K và 32K, teacher pilot trên G4;
+  D26, D27). S0 chính thức chạy trên máy lớn (D25). Kế hoạch: docs/07-colab-test-plan.md.
 Cluster (scripts/cluster/): env, setup, par.sh (mỗi GPU một phần câu hỏi), train.sh (torchrun),
-  pipeline.sh (các giai đoạn s0, s1a, s1b, s2, s4, s5).
+  bringup.sh (kiểm tra ngày đầu: parity, chi phí, nhiều GPU), pipeline.sh (các giai đoạn s0, s1a, s1b, s2,
+  s4, s5).
 
 
 5. CẤU HÌNH (configs/)
@@ -199,7 +202,7 @@ Cluster (scripts/cluster/): env, setup, par.sh (mỗi GPU một phần câu hỏ
   debug_small.yaml diễn tập 0.6B trên Colab
 
 
-6. TEST (tests/, 94 test)
+6. TEST (tests/, 96 test)
 -------------------------
   test_protocol.py     máy trạng thái, các vi phạm, ngữ pháp trie/regex
   test_reward.py       từng dòng Bảng 5; ngưỡng hòa vốn 2,6% và 14%
@@ -222,7 +225,7 @@ Cluster (scripts/cluster/): env, setup, par.sh (mỗi GPU một phần câu hỏ
   04-training-plan.md  các giai đoạn, lệnh, cổng quyết định
   05-running.md        chạy trên máy cá nhân, Colab, 8×B200
   06-evaluation.md     chỉ số, RQ1–RQ5, ablation, lệnh báo cáo
-  decisions.md         nhật ký quyết định D0–D26
+  decisions.md         nhật ký quyết định D0–D27
   07-colab-test-plan.md  kế hoạch thử nghiệm trên Colab Pro; results/colab-test.md: mẫu ghi kết quả
 
 

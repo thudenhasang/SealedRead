@@ -38,6 +38,14 @@ def load_ref_model(ecfg: dict, device=None):
     from srd.model.qwen3 import from_pretrained
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    if ecfg["model"] == "tiny":                       # CPU tests of the scripts: a seeded random tiny model
+        from srd.model.qwen3 import Qwen3Config, Qwen3ForCausalLM
+
+        torch.manual_seed(0)
+        model = Qwen3ForCausalLM(Qwen3Config.tiny()).to(device)
+        for p in model.parameters():
+            torch.nn.init.normal_(p, std=0.2)
+        return model.eval()
     model = from_pretrained(ecfg["model"], dtype=getattr(torch, ecfg.get("dtype", "bfloat16")), device=device)
     if ecfg.get("adapter"):
         load_lora(model, ecfg["adapter"])

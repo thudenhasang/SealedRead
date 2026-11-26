@@ -81,6 +81,23 @@ def answer_rows(seq: Seq, steps: list[Step], tok) -> np.ndarray:
     return (idx[n_open:n_open + n_text] - 1).astype(np.int64)
 
 
+def chain_vs_masked(model, s: Sample, steps: list[Step], tok, prompts: Prompts, mode: str = "dense",
+                    pad_to: int = 1) -> dict:
+    """The masked-phase log-probs of the single chain (C present, masked) against the masked view in the full frame
+    (C absent, positions jumping over |C|): the two must agree up to numerical noise. This is what lets S0 config
+    (b) run without C. Noise: the chain recomputed with another padding (other kernel tiling)."""
+    chain = build_seq(s, steps, tok, prompts, view="chain", branch="sealedread")
+    masked = build_seq(s, steps, tok, prompts, view="masked", frame="full")
+    rows = masked_rows(chain)
+    tgt = torch.as_tensor(chain.ids[rows + 1])
+    a = position_logprobs(model, chain, rows, mode, pad_to).gather(1, tgt[:, None])[:, 0]
+    b = position_logprobs(model, masked, masked_rows(masked), mode, pad_to).gather(1, tgt[:, None])[:, 0]
+    n = position_logprobs(model, chain, rows, mode, 2 * pad_to if pad_to > 1 else 128).gather(1, tgt[:, None])[:, 0]
+    d, dn = (a - b).abs().numpy(), (a - n).abs().numpy()
+    return {"qid": s.qid, "positions": int(len(rows)), "max": float(d.max()), "median": float(np.median(d)),
+            "p99": float(np.percentile(d, 99)), "noise_p99": float(np.percentile(dn, 99))}
+
+
 def _swap_value(text: str, old: str, new: str) -> str:
     import re
 
