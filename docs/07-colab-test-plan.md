@@ -35,7 +35,7 @@ cd /content/sealedread && /content/venv-srd/bin/python -m pytest -q tests
 /content/venv-srd/bin/python scripts/smoke.py --out /content/runs/smoke
 ```
 **Kết quả đạt:**
-- `96 passed`;
+- `106 passed`;
 - `SMOKE_DONE` (đủ 7 bước).
 
 **Nếu trượt:** khác biệt phiên bản thư viện trên Colab. Gửi log để sửa trước khi dùng GPU.

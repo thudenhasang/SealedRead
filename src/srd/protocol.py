@@ -20,6 +20,13 @@ ID_MIN, ID_MAX = 1, 9999
 _ALPHA_RE = re.compile(r"alpha\s*=\s*(query|answer)\s*$")
 _BETA_RE = re.compile(r"beta\s*=\s*(valid_to_think|explore_query|reject_and_requery)\s*$")
 _ID_RE = re.compile(r"\[\[S_(\d{1,4})\]\]")
+# D29: the same final alpha / beta with markup or punctuation around it ("**alpha=query**.", "Beta = Valid_to_think)");
+# anything else after the value (e.g. a copied "(you need to look something up).") still does not parse
+_DECO = r"[\s*_`'\"]*"
+_TAIL = r"[\s.,;:!*_`'\"\)\]]*$"
+_ALPHA_LOOSE = re.compile(_DECO + r"alpha\s*[=:]\s*" + _DECO + r"(query|answer)" + _TAIL, re.I)
+_BETA_LOOSE = re.compile(_DECO + r"beta\s*[=:]\s*" + _DECO + r"(valid_to_think|explore_query|reject_and_requery)"
+                         + _TAIL, re.I)
 
 
 class ProtocolError(ValueError):
@@ -56,6 +63,26 @@ def parse_alpha(text: str) -> str | None:
 def parse_beta(text: str) -> str | None:
     m = _BETA_RE.search(text.strip())
     return m.group(1) if m else None
+
+
+def _normalize(text: str, strict: re.Pattern, loose: re.Pattern, name: str) -> tuple[str, bool]:
+    t = text.strip()
+    if strict.search(t):
+        return t, False
+    m = loose.search(t)
+    if not m:
+        return t, False
+    return (t[:m.start()].rstrip() + f" {name}={m.group(1).lower()}").strip(), True
+
+
+def normalize_alpha(text: str) -> tuple[str, bool]:
+    """Rewrite a decorated final alpha to the canonical 'alpha=query|answer' (D29). Returns (text, changed)."""
+    return _normalize(text, _ALPHA_RE, _ALPHA_LOOSE, "alpha")
+
+
+def normalize_beta(text: str) -> tuple[str, bool]:
+    """Same for the final beta of <recheck>."""
+    return _normalize(text, _BETA_RE, _BETA_LOOSE, "beta")
 
 
 def force_alpha_answer(text: str) -> str:

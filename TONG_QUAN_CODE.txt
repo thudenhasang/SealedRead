@@ -7,7 +7,7 @@ Ngày: 21/11/2026 — dựa trên đề xuất SealedRead bản 2.4 và khuôn r
 - Repo gồm khoảng 9.000 dòng: thư viện Python (src/srd) khoảng 5.100 dòng, script và test khoảng 2.900 dòng,
   còn lại là config, tài liệu và notebook.
 - Gói Python tên "srd", cài bằng: pip install -e ".[train,dev]"
-- 96 test chạy trên CPU (79 hàm test, một số chạy với nhiều tham số), tất cả đều qua.
+- 106 test chạy trên CPU (85 hàm test, một số chạy với nhiều tham số), tất cả đều qua.
 - Bài chạy thử toàn chuỗi trên CPU (scripts/smoke.py) đi hết 7 bước trong khoảng 2 phút.
 - Phần chạy trên GPU (vLLM, teacher, đo chi phí, parity...) ĐÃ VIẾT NHƯNG CHƯA CHẠY LẦN NÀO,
   vì máy dùng để code không có GPU và không vào được Hugging Face.
@@ -202,7 +202,7 @@ Cluster (scripts/cluster/): env, setup, par.sh (mỗi GPU một phần câu hỏ
   debug_small.yaml diễn tập 0.6B trên Colab
 
 
-6. TEST (tests/, 96 test)
+6. TEST (tests/, 106 test)
 -------------------------
   test_protocol.py     máy trạng thái, các vi phạm, ngữ pháp trie/regex
   test_reward.py       từng dòng Bảng 5; ngưỡng hòa vốn 2,6% và 14%

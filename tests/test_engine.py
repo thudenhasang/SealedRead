@@ -130,3 +130,37 @@ def test_reference_masked_view_with_oracle(tok, prompts):
         pol = RefPolicy(_tiny(), tok, prompts, view="masked", frame=frame, proto=proto)
         eps = run_episodes(pol, [make_sample()], n=1, cfg=DriverConfig(proto=proto, locator="oracle", lenient=True))
         assert eps[0].steps[-1].tag == "answer"
+
+
+class _DecoratedPolicy(ScriptedPolicy):
+    """The scripted policy, writing alpha / beta with markup and punctuation around them."""
+
+    def gen_masked(self, eps, tag, force):
+        outs = super().gen_masked(eps, tag, force)
+        if tag in ("reason", "recheck"):
+            outs = [(t.replace("alpha=", "**alpha=").replace("beta=", "*beta=") + ("**." if tag == "reason" else "*"),
+                     hit) for t, hit in outs]
+        return outs
+
+
+def test_driver_normalizes_decorated_alpha_beta_in_strict_mode():
+    """D29: strict runs (teacher, ReST-EM) keep decorated solutions, stored canonically and counted."""
+    eps = run_episodes(_DecoratedPolicy(), _samples(2), n=1, cfg=DriverConfig())
+    for ep in eps:
+        assert ep.error is None and ep.violations(ProtoConfig()) == [], ep.steps
+        assert ep.stats["normalized"] > 0 and ep.stats["format_fixes"] == 0
+        assert all("*" not in st.text for st in ep.steps if st.tag in ("reason", "recheck"))
+
+
+def test_teacher_filter_names_the_violation():
+    from srd.teacher import invalid_reason, teacher_ok
+
+    assert invalid_reason("step 7: locate ID 4410 does not exist") == "invalid: locate ID N does not exist"
+
+    class Copier(ScriptedPolicy):
+        def gen_masked(self, eps, tag, force):
+            return [("what you know so far. End with alpha=query (you need to look something up).", False)
+                    for _ in eps]
+
+    ep = run_episodes(Copier(), _samples(1), n=1, cfg=DriverConfig())[0]
+    assert teacher_ok(ep, ProtoConfig(), RewardConfig()) == (False, "invalid: reason without alpha")

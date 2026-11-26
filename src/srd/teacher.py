@@ -12,6 +12,7 @@ per-tag caps and the <locate> safety cap re-checked with the *student's* tokeniz
 from __future__ import annotations
 
 import random
+import re
 from collections import Counter, defaultdict
 
 from srd.data.sample import Sample
@@ -20,10 +21,18 @@ from srd.protocol import ProtoConfig, steps_to_dicts
 from srd.reward import RewardConfig, score
 
 
+def invalid_reason(violation: str) -> str:
+    """'step 3: locate ID 12 does not exist' -> 'invalid: locate ID N does not exist' (a countable category)."""
+    v = re.sub(r"^step \d+: ", "", violation)
+    return "invalid: " + re.sub(r"\d+", "N", v)
+
+
 def teacher_ok(ep: Episode, proto: ProtoConfig, rcfg: RewardConfig, student_count=None) -> tuple[bool, str]:
+    """(passes the filter, reason). Invalid solutions carry their first violation, e.g. 'invalid: reason without
+    alpha', so the pilot and the stats say why the teacher fails the protocol."""
     viol = ep.violations(proto, student_count)
     if viol:
-        return False, "invalid"
+        return False, invalid_reason(viol[0])
     sc = score(ep.steps, ep.sample, rcfg)
     if sc.r_ans < 1:
         return False, "wrong"

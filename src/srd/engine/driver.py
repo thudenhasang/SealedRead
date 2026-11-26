@@ -15,7 +15,8 @@ from typing import Protocol
 
 from srd.data.sample import Sample
 from srd.protocol import (ProtoConfig, ProtocolError, Step, check_locate, force_alpha_answer, must_answer,
-                          next_tag, order_in_context, parse_alpha, parse_beta, pasted, validate)
+                          next_tag, normalize_alpha, normalize_beta, order_in_context, parse_alpha, parse_beta,
+                          pasted, validate)
 
 
 @dataclass
@@ -27,7 +28,7 @@ class Episode:
     seed: int = 0
     sample_idx: int = 0                  # which of the n samples of its question
     state: dict = field(default_factory=dict)       # backend state (KV cache, builder...)
-    stats: dict = field(default_factory=lambda: {"format_fixes": 0, "cap_hits": 0, "dropped_ids": 0})
+    stats: dict = field(default_factory=lambda: {"format_fixes": 0, "cap_hits": 0, "dropped_ids": 0, "normalized": 0})
 
     def violations(self, cfg: ProtoConfig, token_count=None) -> list[str]:
         if self.error:
@@ -125,6 +126,12 @@ def run_episodes(policy: Policy, samples: list[Sample], n: int, cfg: DriverConfi
 
 
 def _fix_format(ep: Episode, tag: str, text: str, force: bool, cfg: DriverConfig) -> str | None:
+    # D29: a decorated final alpha / beta ("**alpha=query**.") is rewritten canonically in every mode, so traces
+    # stay clean; counted apart from the format fixes (which invent a missing value, lenient mode only)
+    if tag in ("reason", "recheck"):
+        text, changed = (normalize_alpha if tag == "reason" else normalize_beta)(text)
+        if changed:
+            ep.stats["normalized"] = ep.stats.get("normalized", 0) + 1
     if tag == "reason":
         if force and parse_alpha(text) != "answer":
             text = force_alpha_answer(text)

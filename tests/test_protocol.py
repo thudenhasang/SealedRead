@@ -143,3 +143,32 @@ def test_example_trace_roundtrip(sample):
     t = trace_two_rounds(sample)
     t[2].alias = {t[2].ids[0]: 1234}
     assert [s.to_dict() for s in steps_from_dicts(steps_to_dicts(t))] == [s.to_dict() for s in t]
+
+
+@pytest.mark.parametrize("raw, want", [
+    ("I need X. alpha=query", ("I need X. alpha=query", False)),
+    ("I need X. alpha=query.", ("I need X. alpha=query", True)),
+    ("I need X. **alpha=query**", ("I need X. alpha=query", True)),
+    ("Enough. Alpha = Answer )", ("Enough. alpha=answer", True)),
+    ("Enough. alpha: `answer`", ("Enough. alpha=answer", True)),
+])
+def test_normalize_alpha_decorations(raw, want):
+    """D29: a decorated final alpha is rewritten to the canonical form."""
+    from srd.protocol import normalize_alpha
+
+    assert normalize_alpha(raw) == want
+    assert parse_alpha(normalize_alpha(raw)[0]) == want[0].rsplit("=", 1)[1]
+
+
+def test_normalize_does_not_accept_copied_instructions():
+    """The 0.6B rehearsal copied the instruction text; text after the value must still fail (D29)."""
+    from srd.protocol import normalize_alpha, normalize_beta
+
+    copied = ("what you know so far and what is still missing. End with alpha=query (you need to look something "
+              "up) or alpha=answer (you have enough evidence).")
+    text, changed = normalize_alpha(copied)
+    assert not changed and parse_alpha(text) is None
+    assert parse_alpha(normalize_alpha("alpha=query and more")[0]) is None
+    assert normalize_beta("S_12 answers it. *beta=valid_to_think*.") == ("S_12 answers it. beta=valid_to_think",
+                                                                          True)
+    assert parse_beta(normalize_beta("beta=explore_query (it helps partly).")[0]) is None

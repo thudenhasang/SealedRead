@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 import zlib
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 import numpy as np
 
@@ -56,15 +56,21 @@ def check_gold_mapping(samples: list[Sample], min_rate: float = 0.99) -> dict:
 
 
 def check_leaks(samples: list[Sample], min_rate: float = 0.99) -> dict:
-    by_len: dict[int, list[bool]] = defaultdict(list)
-    for s in samples:
-        if s.qtype == "nocontext":
-            continue
+    """Rate of samples without a leaking distractor, per length. Sets built at fixed lengths (dev / test) are
+    reported per length; sets with a random length per sample (train, val, reserve) as one group "mixed" (D30:
+    grouping those by exact length made every sample its own group, so one leak failed the whole set)."""
+    ctx = [s for s in samples if s.qtype != "nocontext"]
+    lengths = Counter(s.length for s in ctx)
+    mixed = len(lengths) > max(1, len(ctx) // 2)
+    by_len: dict[str, list[bool]] = defaultdict(list)
+    for s in ctx:
         it = item_of(s)
         clean = not any(leaks(g.text, it, g.title) for g in s.segments if not g.gold)
-        by_len[s.length].append(clean)
-    rates = {str(k): (sum(v) / len(v)) for k, v in by_len.items()}
-    return {"rate_by_length": rates, "min": min_rate, "pass": all(r >= min_rate for r in rates.values())}
+        by_len["mixed" if mixed else str(s.length)].append(clean)
+    rates = {k: (sum(v) / len(v)) for k, v in by_len.items()}
+    leaking = sum(len(v) - sum(v) for v in by_len.values())
+    return {"rate_by_length": rates, "leaking": leaking, "n": len(ctx), "min": min_rate,
+            "pass": all(r >= min_rate for r in rates.values())}
 
 
 # ---------------------------------------------------------------------- check 3: surface classifier

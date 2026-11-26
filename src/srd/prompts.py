@@ -18,18 +18,41 @@ INSTRUCTION = """\
 You answer a question about a long set of documents. The documents are split into segments labelled [[S_k]] ... \
 [[/S_k]], where k is an ID. While you think you cannot see the documents: you can only read the segments you ask for.
 
-Write your solution as a sequence of tags:
-<reason> what you know so far and what is still missing. End with alpha=query (you need to look something up) or \
-alpha=answer (you have enough evidence). </reason>
-<query> the one thing to look up now </query>
-<locate> 1 to 3 segment IDs, e.g. [[S_12]] [[S_407]] </locate>
-The chosen segments are then pasted for you in <knowledge> ... </knowledge>.
-<recheck> check the pasted text against your query. End with beta=valid_to_think (it answers the query), \
-beta=explore_query (it helps partly) or beta=reject_and_requery (it does not help: ask again). </recheck>
-<answer> the final answer only, as short as possible </answer>
+Write your solution as a sequence of tags. What goes in each tag:
+- reason: in your own words, what you know so far and what is still missing. Its last words are exactly \
+alpha=query (you need to look something up) or alpha=answer (you have enough evidence).
+- query: the one thing to look up now.
+- locate: 1 to 3 segment IDs, written as labels separated by spaces.
+- knowledge: written for you, not by you: the segments you located, pasted word for word.
+- recheck: check the pasted text against your query. Its last words are exactly beta=valid_to_think (it answers \
+the query), beta=explore_query (it helps partly) or beta=reject_and_requery (it does not help: ask again).
+- answer: the final answer only, as short as possible.
 
-Rules: never ask again for a segment that is already pasted; before answering, check every step of your reasoning \
-against the pasted text in a final <reason>; if the question needs no document (e.g. arithmetic), answer directly."""
+Example (another question; its documents are not shown here):
+<reason>The question asks where the director of Film X was born. I need the director first, then the birthplace. \
+alpha=query</reason>
+<query>director of Film X</query>
+<locate>[[S_12]]</locate>
+
+<knowledge>
+[[S_12]] (Film X / Production) Film X is a 1998 drama directed by Ana Ruiz. [[/S_12]]
+</knowledge>
+<recheck>S_12 names the director of Film X: Ana Ruiz. beta=valid_to_think</recheck>
+<reason>The director is Ana Ruiz. I still need where she was born. alpha=query</reason>
+<query>birthplace of Ana Ruiz</query>
+<locate>[[S_407]] [[S_88]]</locate>
+
+<knowledge>
+[[S_88]] (Ana Ruiz / Early life) Ana Ruiz was born in Coimbra and studied in Lisbon. [[/S_88]]
+[[S_407]] (Ana Ruiz / Career) Ruiz moved to Madrid in 1990. [[/S_407]]
+</knowledge>
+<recheck>S_88 says Ana Ruiz was born in Coimbra; S_407 is not needed. beta=valid_to_think</recheck>
+<reason>Check: Film X was directed by Ana Ruiz (S_12), and Ana Ruiz was born in Coimbra (S_88). alpha=answer</reason>
+<answer>Coimbra</answer>
+
+Rules: write your own content, never these descriptions or the example; never ask again for a segment that is \
+already pasted; before answering, check every step of your reasoning against the pasted text in a final <reason>; \
+if the question needs no document (e.g. arithmetic), answer directly."""
 
 PLAIN_INSTRUCTION = """\
 Answer the question about the documents below. Think step by step in <reason> ... </reason>, then give the final \

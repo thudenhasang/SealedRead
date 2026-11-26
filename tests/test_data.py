@@ -207,3 +207,21 @@ def test_dev_test_selection_does_not_depend_on_train_settings(tmp_path):
 
     # different train settings (size, shards) with the same passage pool -> the same dev questions AND contexts
     assert build(10, tmp_path / "a", [0]) == build(30, tmp_path / "b", [0, 1])
+
+
+def test_leak_check_groups_random_lengths(built):
+    """D30: a set with one random length per sample is one group; one leak in many samples does not fail it."""
+    import copy
+
+    many = []
+    for i in range(120):
+        s = copy.deepcopy(built[i % len(built)])
+        s.length = 4000 + i
+        many.append(s)
+    leaky = many[0]
+    distractor = next(g for g in leaky.segments if not g.gold)
+    distractor.text += " " + leaky.answers[0] + "."
+    r = check_leaks(many)
+    assert list(r["rate_by_length"]) == ["mixed"] and r["leaking"] == 1 and r["pass"]
+    fixed = check_leaks(built)
+    assert "mixed" not in fixed["rate_by_length"]          # a fixed-length set stays per length

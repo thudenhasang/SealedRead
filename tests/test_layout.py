@@ -151,3 +151,16 @@ def test_empty_prefix_override_is_empty_string():
 
     p = Prompts.from_cfg({"assistant_prefix": None})
     assert p.assistant_start() == "<|im_start|>assistant\n"
+
+
+def test_instruction_has_no_fill_in_templates():
+    """The 0.6B rehearsal copied '<reason> what you know so far ...' word for word: tag descriptions stay outside the
+    tags, and the worked example's masked steps end with the canonical alpha / beta (D28)."""
+    import re
+
+    from srd.prompts import INSTRUCTION
+    from srd.protocol import parse_alpha, parse_beta
+
+    for tag, text in re.findall(r"<(reason|recheck)>(.*?)</\1>", INSTRUCTION, re.S):
+        assert (parse_alpha if tag == "reason" else parse_beta)(text) is not None, text
+    assert "<reason> what you know" not in INSTRUCTION
